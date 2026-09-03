@@ -150,6 +150,50 @@
 }
 
 /* ------------------------------------------------------------------
+   Casca da navbar.
+   O fundo e o desfoque vivem aqui (e não em classes utilitárias) para o
+   bloco "modo econômico" lá embaixo poder trocar o `backdrop-filter` por
+   um fundo opaco no celular: desfocar uma faixa fixa custa um repaint da
+   barra inteira a cada quadro de rolagem.
+   ------------------------------------------------------------------ */
+.nav-shell {
+  border-bottom: 1px solid transparent;
+  background-color: transparent;
+  transition:
+    background-color 0.3s var(--ease-brand),
+    border-color 0.3s var(--ease-brand);
+}
+
+.nav-shell.is-solid {
+  border-bottom-color: rgb(42 42 42 / 0.8);
+  background-color: rgb(10 10 10 / 0.8);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* ------------------------------------------------------------------
+   Fotos do túnel do hero.
+   `--near` (0 ao fundo, 1 na câmera) é escrito pelo laço em passos, não a
+   cada quadro: cada mudança repinta a foto inteira por causa do
+   `grayscale()`. No celular a moldura acesa e o meio-tom saem de cena —
+   são as duas camadas que forçam repaint de imagem grande por quadro.
+   ------------------------------------------------------------------ */
+.tunnel-photo {
+  border: 1px solid rgb(240 25 125 / calc(0.18 + var(--near, 0) * 0.55));
+  box-shadow:
+    0 0 calc(var(--near, 0) * 44px) rgb(240 25 125 / calc(var(--near, 0) * 0.38)),
+    0 18px 60px rgb(0 0 0 / 0.65);
+  filter: grayscale(calc(1 - var(--near, 0) * 0.95)) contrast(1.05);
+}
+
+/* Plano de trás dos escorridos: desfoque de profundidade. Ele cobre uma
+   faixa inteira do hero e tem conteúdo em movimento por baixo — no celular
+   isso significa refazer o desfoque a cada quadro, então lá ele sai. */
+.drip-soften {
+  filter: blur(1.5px);
+}
+
+/* ------------------------------------------------------------------
    Peças da esfera de campeonatos.
    Preto e branco em repouso, cor e moldura rosa no hover — a mesma regra
    que o sistema define para a grade de portfólio. `transform`, `opacity` e
@@ -416,5 +460,64 @@
   .gallery-3d {
     --photo-scale: 1.35;
     --photo-spread: 1.08;
+  }
+}
+
+/* ------------------------------------------------------------------
+   MODO ECONÔMICO — telas de toque e/ou estreitas.
+
+   Mesmo recorte de `LOW_POWER_QUERY` em `src/lib/perf.ts`: o JS corta a
+   quantidade de coisas em movimento, e aqui saem de cena as propriedades
+   que obrigam o celular a repintar áreas grandes a cada quadro —
+   `mix-blend-mode`, `backdrop-filter`, sombras desfocadas e o pulso das
+   gotas de spray (dezenas de animações de SVG simultâneas).
+
+   O desenho continua o mesmo; o que muda é o custo por quadro.
+   ------------------------------------------------------------------ */
+@media (max-width: 900px), (pointer: coarse) {
+  /* o grão vira uma camada normal: `overlay` isola a seção inteira numa
+     camada de composição só para misturar um ruído de 6% */
+  .texture-noise::after {
+    opacity: 0.05;
+    mix-blend-mode: normal;
+  }
+
+  /* meio-tom por cima de foto: uma camada extra por imagem do túnel */
+  .texture-halftone.halftone-photo {
+    display: none;
+  }
+
+  /* barra sólida em vez de desfocada */
+  .nav-shell.is-solid {
+    background-color: rgb(10 10 10 / 0.94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* moldura acesa some; sobra a sombra de apoio, que é estática */
+  .tunnel-photo {
+    border-color: rgb(240 25 125 / 0.28);
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.6);
+  }
+
+  .drip-soften {
+    filter: none;
+  }
+
+  /* as gotas graúdas param de pulsar (repaint de SVG por quadro) */
+  .spray-dot {
+    animation: none;
+  }
+
+  /* sem `will-change` em ~9 peças ao mesmo tempo: cada uma vira uma textura
+     na memória da GPU, e o laço já promove a camada com translate3d */
+  .sphere-tile {
+    will-change: auto;
+    box-shadow: 0 0 0 1px rgb(240 25 125 / 0.25);
+  }
+
+  .sphere-tile:hover,
+  .sphere-tile.is-active {
+    box-shadow: 0 0 0 2px var(--color-pink-500);
   }
 }

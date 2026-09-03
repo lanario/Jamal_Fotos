@@ -97,7 +97,10 @@ export default function SocialFab() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-20 cursor-default bg-ink-900/55 backdrop-blur-[2px] sm:bg-transparent sm:backdrop-blur-none"
+            /* sem `backdrop-filter`: a página continua rolando por baixo e o
+               desfoque seria refeito a cada quadro — o scrim mais opaco
+               cumpre o mesmo papel */
+            className="fixed inset-0 z-20 cursor-default bg-ink-900/70 sm:bg-transparent"
           />
         )}
       </AnimatePresence>

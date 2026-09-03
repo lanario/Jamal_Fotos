@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 
 import { SprayStroke } from "@/components/ui/spray";
+import { isLowPowerDevice, prefersReducedMotion } from "@/lib/perf";
 
 const LETTERS = ["J", "M", "L"];
 
@@ -21,7 +22,12 @@ export default function HeroTitle() {
     const root = rootRef.current;
     if (!root) return;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (prefersReducedMotion()) return;
+
+    // as letras ocupam quase a tela toda: desfocá-las custa um repaint de
+    // página inteira por quadro durante quase um segundo — o pior momento
+    // possível no celular, que ainda está decodificando as fotos do túnel
+    const lowPower = isLowPowerDevice();
 
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
@@ -30,7 +36,7 @@ export default function HeroTitle() {
         opacity: 0,
         yPercent: 55,
         scale: 0.9,
-        filter: "blur(16px)",
+        ...(lowPower ? null : { filter: "blur(16px)" }),
         duration: 0.9,
         stagger: 0.1,
       })
@@ -51,10 +57,24 @@ export default function HeroTitle() {
         )
         .from(
           "[data-anim='sports']",
-          { opacity: 0, y: 10, letterSpacing: "1.4em", duration: 0.8 },
+          {
+            opacity: 0,
+            y: 10,
+            // `letter-spacing` refaz o layout do lockup a cada quadro; no
+            // celular a linha entra só subindo
+            ...(lowPower ? null : { letterSpacing: "1.4em" }),
+            duration: 0.8,
+          },
           "-=0.55"
         )
         .from("[data-anim='tagline']", { opacity: 0, y: 10, duration: 0.6 }, "-=0.4");
+
+      // a promoção de camada vale só durante a entrada: mantida depois, as
+      // três letras gigantes ficariam como texturas paradas na GPU
+      gsap.set("[data-anim='letter']", { willChange: "transform, opacity" });
+      tl.eventCallback("onComplete", () => {
+        gsap.set("[data-anim='letter']", { willChange: "auto" });
+      });
     }, root);
 
     return () => ctx.revert();
@@ -101,7 +121,6 @@ export default function HeroTitle() {
               style={{
                 backgroundSize: "300% 100%",
                 backgroundPosition: `${(i / (LETTERS.length - 1)) * 100}% 0`,
-                willChange: "transform, filter, opacity",
               }}
             >
               {letter}

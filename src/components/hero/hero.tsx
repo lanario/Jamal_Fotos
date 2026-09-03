@@ -11,6 +11,7 @@ import InfiniteGallery, {
 import { Drips, Splatter } from "@/components/ui/spray";
 import HeroTitle from "@/components/hero/hero-title";
 import { galleryImages } from "@/data/gallery";
+import { isLowPowerDevice } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -29,6 +30,8 @@ export default function Hero() {
 
     // a barra do navegador mobile aparecendo/sumindo não deve remedir tudo
     ScrollTrigger.config({ ignoreMobileResize: true });
+
+    const lowPower = isLowPowerDevice();
 
     const ctx = gsap.context(() => {
       // 1. a rolagem da página empurra o túnel — sem sequestrar o scroll
@@ -62,7 +65,9 @@ export default function Hero() {
           opacity: 0,
           yPercent: -8,
           scale: 0.94,
-          filter: "blur(14px)",
+          // desfocar um lockup do tamanho da tela é um repaint inteiro por
+          // quadro de rolagem: no celular a saída é só opacidade + escala
+          ...(lowPower ? null : { filter: "blur(14px)" }),
           ease: "none",
           duration: 0.6,
         });
@@ -140,7 +145,7 @@ export default function Hero() {
           speed={0.65}
           depth={0.25}
           interactive={false}
-          className="inset-x-0 top-0 h-[38vh] opacity-45 blur-[1.5px]"
+          className="drip-soften inset-x-0 top-0 h-[38vh] opacity-45"
         />
         <Drips
           seed={2}

@@ -13,6 +13,7 @@ import { SlideTabs, type SlideTab } from "@/components/ui/slide-tabs";
 import { Drips, Splatter } from "@/components/ui/spray";
 import { navItems, type NavItem } from "@/data/nav";
 import { socialLinks } from "@/data/social";
+import { prefersReducedMotion } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
@@ -23,9 +24,7 @@ const tabs: SlideTab[] = navItems.map((item) => ({
   label: item.short ?? item.label,
 }));
 
-const reduceMotion = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduceMotion = prefersReducedMotion;
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -76,16 +75,35 @@ export default function Navbar() {
     const header = headerRef.current;
     if (!header) return;
 
+    /*
+     * Este callback roda a cada quadro de rolagem, então ele não pode nem
+     * criar tween nem mexer no estado do React sem necessidade: antes,
+     * cada quadro instanciava um `gsap.to` novo (com `overwrite`, o que
+     * ainda obriga a varrer os tweens existentes) e chamava `setSolid`.
+     * Agora só o que muda é escrito.
+     */
+    let hidden: boolean | null = null;
+    let isSolid: boolean | null = null;
+
     const trigger = ScrollTrigger.create({
       start: 0,
       end: "max",
       onUpdate: (self) => {
         const y = self.scroll();
-        setSolid(y > 40);
+
+        const solidNow = y > 40;
+        if (solidNow !== isSolid) {
+          isSolid = solidNow;
+          setSolid(solidNow);
+        }
 
         // esconde ao descer, revela ao subir — mas nunca com o menu aberto
         if (open || reduceMotion()) return;
+
         const hide = self.direction === 1 && y > 240;
+        if (hide === hidden) return;
+        hidden = hide;
+
         gsap.to(header, {
           yPercent: hide ? -130 : 0,
           duration: 0.45,
@@ -159,13 +177,9 @@ export default function Navbar() {
     <>
       {/* o <header> é do GSAP (auto-hide); a entrada vive na camada de dentro */}
       <header ref={headerRef} className="fixed inset-x-0 top-0 z-50">
-        <div
-          className={`nav-enter transition-[background-color,border-color,backdrop-filter] duration-300 ${
-            solid && !open
-              ? "border-b border-ink-600/80 bg-ink-900/80 backdrop-blur-md"
-              : "border-b border-transparent bg-transparent"
-          }`}
-        >
+        {/* `.nav-shell` está em globals.css: é lá que o modo econômico troca
+            o `backdrop-filter` por um fundo opaco no celular */}
+        <div className={`nav-enter nav-shell ${solid && !open ? "is-solid" : ""}`}>
           <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-8">
             <Link
               href="/#topo"

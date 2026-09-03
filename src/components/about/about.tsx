@@ -8,6 +8,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 import { Splatter, SprayStroke } from "@/components/ui/spray";
 import { jamalPortrait } from "@/data/portrait";
+import { isLowPowerDevice, prefersReducedMotion } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -33,7 +34,9 @@ export default function About() {
     const section = sectionRef.current;
     if (!section) return;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (prefersReducedMotion()) return;
+
+    const lowPower = isLowPowerDevice();
 
     const ctx = gsap.context(() => {
       // retrato: revela de baixo para cima como um cartaz sendo colado
@@ -100,17 +103,21 @@ export default function About() {
         scrollTrigger: { trigger: "[data-about='bio']", start: "top 88%" },
       });
 
-      // respingos com parallax leve, para o fundo não ficar estático
-      gsap.to("[data-about='splat']", {
-        yPercent: -18,
-        ease: "none",
-        scrollTrigger: {
-          trigger: section,
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 0.8,
-        },
-      });
+      // respingos com parallax leve, para o fundo não ficar estático.
+      // No celular eles ficam parados: são dois SVGs do tamanho de meia tela
+      // e movê-los custa uma rasterização por quadro de rolagem
+      if (!lowPower) {
+        gsap.to("[data-about='splat']", {
+          yPercent: -18,
+          ease: "none",
+          scrollTrigger: {
+            trigger: section,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 0.8,
+          },
+        });
+      }
     }, section);
 
     return () => ctx.revert();

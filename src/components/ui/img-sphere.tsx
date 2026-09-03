@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 
+import { prefersReducedMotion, watchActivity } from "@/lib/perf";
 import { cn, clamp } from "@/lib/utils";
 
 /**
@@ -48,10 +49,6 @@ export type SphereImageGridProps = {
   className?: string;
 };
 
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 export default function SphereImageGrid({
   images,
   containerSize = 600,
@@ -69,9 +66,12 @@ export default function SphereImageGrid({
   onSelectImage,
   className,
 }: SphereImageGridProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const tilesRef = useRef<(HTMLButtonElement | null)[]>([]);
   const labelRef = useRef<HTMLDivElement>(null);
+  /** Último `z-index`/`opacity` escrito em cada peça. */
+  const written = useRef<{ z: number; o: string }[]>([]);
 
   const rotation = useRef({ x: -0.12, y: 0 });
   const velocity = useRef({ x: 0, y: 0 });
@@ -103,7 +103,7 @@ export default function SphereImageGrid({
   }, [activeGroup, images]);
 
   useEffect(() => {
-    const stage = stageRef.current?.parentElement;
+    const stage = hostRef.current;
     if (!stage) return;
 
     const measure = () => {
@@ -205,11 +205,27 @@ export default function SphereImageGrid({
         const px = x1 * radius * proj;
         const py = y2 * radius * proj;
 
-        el.style.transform = `translate3d(${px}px, ${py}px, 0) scale(${scale})`;
-        el.style.zIndex = String(1000 + Math.round(depth));
-        el.style.opacity = String(
+        const state = (written.current[i] ??= { z: NaN, o: "" });
+
+        el.style.transform = `translate3d(${px.toFixed(2)}px, ${py.toFixed(
+          2
+        )}px, 0) scale(${scale.toFixed(4)})`;
+
+        // z-index e opacity mudam devagar perto dos polos: reescrever o mesmo
+        // valor invalida o estilo da peça à toa
+        const z = 1000 + Math.round(depth);
+        if (z !== state.z) {
+          state.z = z;
+          el.style.zIndex = String(z);
+        }
+
+        const o = (
           (dimmed ? byDepth * 0.45 : isHovered ? 1 : byDepth) * fade
-        );
+        ).toFixed(3);
+        if (o !== state.o) {
+          state.o = o;
+          el.style.opacity = o;
+        }
 
         // o rótulo é um elemento só, que segue a bolha apontada. Se fosse um
         // por bolha, herdaria o `scale()` dela e o texto sairia deformado.
@@ -228,9 +244,34 @@ export default function SphereImageGrid({
       raf = requestAnimationFrame(frame);
     };
 
-    raf = requestAnimationFrame(frame);
+    /*
+     * A esfera vive numa página inteira de rolagem: sem esta trava, o laço
+     * seguia projetando as peças quadro a quadro enquanto a pessoa lia o
+     * rodapé — e disputando tempo com a rolagem no celular.
+     */
+    const host = hostRef.current;
+    if (!host) return () => tween.kill();
+
+    const stop = watchActivity(host, (active) => {
+      if (active) {
+        if (!raf) {
+          // sem o salto do tempo parado na primeira volta
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        }
+        tween.resume();
+        return;
+      }
+
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      tween.pause();
+    });
 
     return () => {
+      stop();
       cancelAnimationFrame(raf);
       tween.kill();
     };
@@ -291,6 +332,7 @@ export default function SphereImageGrid({
 
   return (
     <div
+      ref={hostRef}
       className={cn(
         // `isolate` é obrigatório: o laço dá z-index de 1000+ às bolhas para
         // ordená-las por profundidade e, sem um contexto de empilhamento

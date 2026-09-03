@@ -7,11 +7,13 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import gsap from "gsap";
 
 import type { GalleryImage } from "@/lib/types";
 import { useIsomorphicLayoutEffect } from "@/lib/hooks";
+import { isLowPowerDevice, watchActivity } from "@/lib/perf";
 import { cn, clamp, invLerp, mod, seeded } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ *
@@ -28,6 +30,24 @@ const GOLDEN_ANGLE = 2.399963229728653;
 const DAMPING = 5.5;
 /** Raio minimo das fotos: mantem o centro livre para o wordmark. */
 const CLEAR_ZONE = 0.32;
+
+/**
+ * Fotos que o HTML do servidor já traz. O cliente completa a fila conforme o
+ * aparelho (ver `LIMIT`): assim o primeiro render é igual nos dois lados —
+ * sem erro de hidratação — e nenhum celular baixa e decodifica o acervo
+ * inteiro só para preencher um túnel que mostra uma dúzia de fotos por vez.
+ */
+const SSR_COUNT = 8;
+
+/** Teto de fotos no DOM por tipo de aparelho. */
+const LIMIT = { low: 14, full: Infinity };
+
+/**
+ * Degraus de `--near`. Cada mudança repinta a foto (o `grayscale()` do
+ * `.tunnel-photo`), então o valor anda em passos em vez de a cada quadro —
+ * o olho não vê a diferença, a GPU sente.
+ */
+const NEAR_STEPS = { low: 4, full: 10 };
 
 type Placement = {
   x: number; // vw a partir do centro
@@ -84,24 +104,54 @@ export default function InfiniteGallery({
 }: InfiniteGalleryProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  /** Último estado escrito em cada peça — evita reescrever o que não mudou. */
+  const written = useRef<{ near: number; hidden: boolean }[]>([]);
 
   const current = useRef(0);
   const target = useRef(0);
   const lastInput = useRef(0);
+  /** Multiplicador de `--photo-spread`, lido do CSS (muda por breakpoint). */
+  const spread = useRef(1);
 
-  const placements = useMemo(() => images.map((_, i) => placeImage(i)), [images]);
+  /** Sobe de `SSR_COUNT` para o teto do aparelho logo após a hidratação. */
+  const [mounted, setMounted] = useState(false);
+  const [lowPower, setLowPower] = useState(false);
 
-  const total = images.length * zSpacing;
-  const windowDepth = Math.min(visibleCount * zSpacing, total);
+  useEffect(() => {
+    setLowPower(isLowPowerDevice());
+    setMounted(true);
+  }, []);
+
+  const shown = useMemo(() => {
+    if (!mounted) return images.slice(0, SSR_COUNT);
+    const cap = lowPower ? LIMIT.low : LIMIT.full;
+    return images.slice(0, Math.min(images.length, cap));
+  }, [images, mounted, lowPower]);
+
+  const placements = useMemo(() => shown.map((_, i) => placeImage(i)), [shown]);
+
+  // menos fotos acesas ao mesmo tempo: cada uma é uma camada composta
+  const depthWindow = lowPower ? Math.min(visibleCount, 7) : visibleCount;
+  const nearSteps = lowPower ? NEAR_STEPS.low : NEAR_STEPS.full;
+
+  const total = shown.length * zSpacing;
+  const windowDepth = Math.min(depthWindow * zSpacing, total);
   const fadeIn = Math.min(falloff.far, windowDepth * 0.9);
   const fadeOut = falloff.near;
 
   /** Posiciona todas as fotos para um dado avanço do túnel. */
   const layout = useCallback(
     (progress: number) => {
+      const spd = spread.current;
+
       for (let i = 0; i < placements.length; i++) {
         const el = itemRefs.current[i];
         if (!el) continue;
+
+        // `hidden: true` casa com o estado inicial do elemento (o style inline
+        // do render) — começar em `false` faria o laço pular a primeira
+        // liberação e o túnel ficaria invisível
+        const state = (written.current[i] ??= { near: -1, hidden: true });
 
         // profundidade em unidades, embrulhada em [-fadeOut, total - fadeOut)
         const d = mod(i * zSpacing - progress + fadeOut, total) - fadeOut;
@@ -113,7 +163,10 @@ export default function InfiniteGallery({
               invLerp(-fadeOut, 0, d);
 
         if (opacity <= 0.001) {
-          if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
+          if (!state.hidden) {
+            el.style.visibility = "hidden";
+            state.hidden = true;
+          }
           continue;
         }
 
@@ -121,19 +174,53 @@ export default function InfiniteGallery({
         // perto da câmera a foto ganha cor; ao fundo fica preto e branco
         const near = 1 - invLerp(0, windowDepth * 0.6, Math.max(d, 0));
 
-        el.style.visibility = "visible";
+        if (state.hidden) {
+          el.style.visibility = "visible";
+          state.hidden = false;
+        }
+
         el.style.opacity = opacity.toFixed(3);
-        el.style.transform = `translate3d(calc(${p.x}vw * var(--photo-spread)), calc(${p.y}vh * var(--photo-spread)), ${(-d * UNIT).toFixed(1)}px) rotate(${p.rot}deg)`;
-        el.style.setProperty("--near", near.toFixed(3));
+        // o fator de `--photo-spread` entra já resolvido: um `calc()` com
+        // `var()` no transform obrigaria o browser a reavaliar a variável
+        // para cada foto, a cada quadro
+        el.style.transform = `translate3d(${(p.x * spd).toFixed(2)}vw, ${(
+          p.y * spd
+        ).toFixed(2)}vh, ${(-d * UNIT).toFixed(1)}px) rotate(${p.rot}deg)`;
+
+        // repinta só quando muda de degrau (ver NEAR_STEPS)
+        const stepped = Math.round(near * nearSteps) / nearSteps;
+        if (stepped !== state.near) {
+          state.near = stepped;
+          el.style.setProperty("--near", stepped.toFixed(3));
+        }
       }
     },
-    [placements, zSpacing, total, windowDepth, fadeIn, fadeOut]
+    [placements, zSpacing, total, windowDepth, fadeIn, fadeOut, nearSteps]
   );
+
+  /** Relê o `--photo-spread` do CSS (muda com o breakpoint). */
+  const measure = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const raw = getComputedStyle(root).getPropertyValue("--photo-spread");
+    const value = Number.parseFloat(raw);
+    spread.current = Number.isFinite(value) && value > 0 ? value : 1;
+  }, []);
 
   // primeiro frame síncrono: a galeria aparece já posicionada, sem esperar rAF
   useIsomorphicLayoutEffect(() => {
+    measure();
     layout(current.current);
-  }, [layout]);
+  }, [layout, measure]);
+
+  useEffect(() => {
+    window.addEventListener("resize", measure, { passive: true });
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, [measure]);
 
   /*
    * A galeria NÃO captura roda/toque: quem manda no túnel é a rolagem da
@@ -152,7 +239,8 @@ export default function InfiniteGallery({
   );
 
   useEffect(() => {
-    if (images.length === 0) return;
+    const root = rootRef.current;
+    if (!root || shown.length === 0) return;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     lastInput.current = performance.now();
@@ -173,12 +261,32 @@ export default function InfiniteGallery({
       layout(current.current);
     };
 
-    gsap.ticker.add(tick);
+    /*
+     * O laço só roda com o túnel na tela. Fora dela ele continuaria
+     * recalculando dezenas de transforms por quadro enquanto a pessoa lê o
+     * resto da página — no celular é exatamente essa disputa que trava a
+     * rolagem depois do hero.
+     */
+    let running = false;
+
+    const stop = watchActivity(root, (active) => {
+      if (active === running) return;
+      running = active;
+
+      if (active) {
+        // sem o "pulo" acumulado do tempo parado
+        lastInput.current = performance.now();
+        gsap.ticker.add(tick);
+      } else {
+        gsap.ticker.remove(tick);
+      }
+    });
 
     return () => {
+      stop();
       gsap.ticker.remove(tick);
     };
-  }, [images.length, speed, idleDelay, layout]);
+  }, [shown.length, speed, idleDelay, layout]);
 
   return (
     <div
@@ -195,7 +303,7 @@ export default function InfiniteGallery({
         className="absolute inset-0 grid place-items-center"
         style={{ transformStyle: "preserve-3d" }}
       >
-        {images.map((img, i) => {
+        {shown.map((img, i) => {
           const p = placements[i]!;
           return (
             <div
@@ -203,27 +311,21 @@ export default function InfiniteGallery({
               ref={(el) => {
                 itemRefs.current[i] = el;
               }}
-              className="absolute will-change-transform"
+              // sem `will-change`: o `translate3d` do laço já promove a camada,
+              // e a dica permanente multiplicaria as texturas na GPU
+              className="absolute"
               style={{
                 width: `calc(${p.w}vw * var(--photo-scale))`,
                 minWidth: 128,
                 aspectRatio: `${img.width} / ${img.height}`,
                 visibility: "hidden",
-                transformStyle: "preserve-3d",
                 backfaceVisibility: "hidden",
               }}
             >
-              {/* moldura pichada: borda rosa + halo neon que acende de perto */}
-              <div
-                className="rounded-img relative h-full w-full overflow-hidden"
-                style={{
-                  border:
-                    "1px solid rgb(240 25 125 / calc(0.18 + var(--near, 0) * 0.55))",
-                  boxShadow:
-                    "0 0 calc(var(--near, 0) * 44px) rgb(240 25 125 / calc(var(--near, 0) * 0.38)), 0 18px 60px rgb(0 0 0 / 0.65)",
-                  filter: "grayscale(calc(1 - var(--near, 0) * 0.95)) contrast(1.05)",
-                }}
-              >
+              {/* moldura pichada: borda rosa + halo neon que acende de perto
+                  (as três propriedades ligadas a `--near` estão no CSS, para
+                  o modo econômico do celular poder desligá-las) */}
+              <div className="tunnel-photo rounded-img relative h-full w-full overflow-hidden">
                 <Image
                   src={img.src}
                   alt={img.alt}
@@ -232,13 +334,14 @@ export default function InfiniteGallery({
                   placeholder={img.blurDataURL ? "blur" : "empty"}
                   blurDataURL={img.blurDataURL}
                   priority={i < 3}
+                  loading={i < 3 ? undefined : "lazy"}
                   className="object-cover"
                   draggable={false}
                 />
                 {/* trama de meio-tom por cima da foto, como nas artes */}
                 <div
                   aria-hidden
-                  className="texture-halftone pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-screen"
+                  className="texture-halftone halftone-photo pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-screen"
                 />
               </div>
             </div>

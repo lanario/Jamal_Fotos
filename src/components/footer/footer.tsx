@@ -11,6 +11,7 @@ import { Drips, Splatter, SprayStroke } from "@/components/ui/spray";
 import { footerArt } from "@/data/art";
 import { navItems } from "@/data/nav";
 import { WHATSAPP_DISPLAY, socialLinks } from "@/data/social";
+import { isLowPowerDevice, prefersReducedMotion } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -37,7 +38,9 @@ export default function Footer() {
     const footer = footerRef.current;
     if (!footer) return;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (prefersReducedMotion()) return;
+
+    const lowPower = isLowPowerDevice();
 
     const ctx = gsap.context(() => {
       // a arte é um cartaz sendo colado: revela de baixo para cima
@@ -54,21 +57,29 @@ export default function Footer() {
       // deslocamento grande abriria um vão morto acima do texto.
       const shift = window.matchMedia("(min-width: 1024px)").matches ? 8 : 4;
 
-      gsap.fromTo(
-        artInnerRef.current,
-        { yPercent: shift, scale: 1.05 },
-        {
-          yPercent: -shift,
-          scale: 0.99,
-          ease: "none",
-          scrollTrigger: {
-            trigger: artRef.current,
-            start: "top bottom",
-            end: "bottom top",
-            scrub: 0.6,
-          },
-        }
-      );
+      /*
+       * A arte entra com `mix-blend-lighten` + máscara radial. Qualquer
+       * movimento dela obriga o celular a refazer a mistura da imagem
+       * inteira a cada quadro de rolagem — e o ganho visual é um deslize de
+       * 4%. Lá fica só a revelação de entrada, que roda uma vez.
+       */
+      if (!lowPower) {
+        gsap.fromTo(
+          artInnerRef.current,
+          { yPercent: shift, scale: 1.05 },
+          {
+            yPercent: -shift,
+            scale: 0.99,
+            ease: "none",
+            scrollTrigger: {
+              trigger: artRef.current,
+              start: "top bottom",
+              end: "bottom top",
+              scrub: 0.6,
+            },
+          }
+        );
+      }
 
       // escorridos crescendo da borda de cima conforme o rodapé entra
       gsap.from("[data-footer='drips']", {
@@ -81,25 +92,38 @@ export default function Footer() {
       });
 
       // respingos com parallax leve, para o fundo não ficar estático
-      gsap.to("[data-footer='splat']", {
-        yPercent: -22,
-        ease: "none",
-        scrollTrigger: {
-          trigger: footer,
-          start: "top bottom",
-          end: "bottom bottom",
-          scrub: 0.9,
-        },
-      });
+      if (!lowPower) {
+        gsap.to("[data-footer='splat']", {
+          yPercent: -22,
+          ease: "none",
+          scrollTrigger: {
+            trigger: footer,
+            start: "top bottom",
+            end: "bottom bottom",
+            scrub: 0.9,
+          },
+        });
+      }
 
-      // wordmark gigante: desliza e vai abrindo o tracking com o scroll
+      // wordmark gigante: desliza e vai abrindo o tracking com o scroll.
+      // O tracking é a única parte cara (mexer em `letter-spacing` remede e
+      // repinta a linha inteira a cada quadro), então no celular sobram só
+      // o deslize e o fade — os dois de graça, na composição.
+      const tracking = lowPower
+        ? null
+        : { from: "0.05em", to: "-0.03em" };
+
       gsap.fromTo(
         "[data-footer='wordmark']",
-        { xPercent: -4, opacity: 0.2, letterSpacing: "0.05em" },
+        {
+          xPercent: -4,
+          opacity: 0.2,
+          ...(tracking ? { letterSpacing: tracking.from } : null),
+        },
         {
           xPercent: 2,
           opacity: 1,
-          letterSpacing: "-0.03em",
+          ...(tracking ? { letterSpacing: tracking.to } : null),
           ease: "none",
           scrollTrigger: {
             trigger: "[data-footer='wordmark']",

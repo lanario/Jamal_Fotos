@@ -118,6 +118,9 @@ Títulos display sempre **uppercase**. Corpo nunca uppercase.
 - Hover de card: `180ms`. Nada de bounce.
 - Efeito assinatura: **spray reveal** — máscara de respingo revelando a imagem.
 - Respeitar `prefers-reduced-motion`.
+- **Modo econômico no celular** (ver seção 11): o desenho é o mesmo, o
+  orçamento de quadro não. Movimento contínuo é privilégio de quem tem GPU
+  sobrando.
 
 ## 7. Ativos
 
@@ -280,3 +283,36 @@ leitor de tela usa a lista de eventos ao lado, que é a mesma fonte de verdade
 reparte o acervo geral em rodízio entre os 9 campeonatos, de forma
 determinística (nada de `Math.random()`, que quebraria a hidratação). Quando
 chegarem os conjuntos reais, é só trocar a montagem de `photos`.
+
+---
+
+## 11. Movimento no celular (`src/lib/perf.ts`)
+
+O site é feito de camadas em movimento — túnel de fotos, respingos, escorridos,
+parallax, esfera. No desktop elas cabem no quadro; no celular, somadas, não. A
+regra é: **em tela de toque ou estreita, o que não muda o desenho sai de cena.**
+
+`LOW_POWER_QUERY` (`max-width: 900px, pointer: coarse`) é a fonte única dessa
+decisão, e vale nos dois lados:
+
+- **JS** — `useLowPower()` / `isLowPowerDevice()` cortam o que custa por quadro:
+  parallax dos respingos, deriva dos planos de spray, reação ao cursor
+  (que num celular nem existe), o pingo que se desprende dos escorridos, o
+  `blur()` na saída do lockup e o `letter-spacing` animado do rodapé —
+  propriedades que refazem layout ou repintam a tela inteira a cada quadro.
+- **CSS** — o bloco "modo econômico" de `globals.css` desliga `mix-blend-mode`,
+  `backdrop-filter`, sombras desfocadas e o pulso das gotas de spray.
+
+Duas regras valem em **qualquer** aparelho:
+
+- **Laço fora da tela não roda.** `watchActivity()` (IntersectionObserver +
+  `visibilitychange`) pausa o túnel do hero, a esfera do portfólio e os
+  escorridos quando saem de vista ou a aba é escondida.
+- **Não reescrever o que não mudou.** Os laços guardam o último valor escrito
+  de `visibility`, `z-index`, `opacity` e `--near`; este último anda em degraus,
+  porque cada mudança repinta a foto (ela tem `grayscale()`).
+
+Medido no Chromium com emulação de Pixel 5 e CPU 4× mais lenta, rolando a página
+inteira: home 50 ms → 16,7 ms de mediana por quadro (76 de 77 quadros
+atrasados → 2 de 185); portfólio 33,3 ms → 16,7 ms. O desktop não mudou —
+mesmas 26 fotos no túnel e mesmas 943 gotas de spray de antes.

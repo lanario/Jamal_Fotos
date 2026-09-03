@@ -5,6 +5,7 @@ import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
+import { NO_MOTION_QUERY, useLowPower, watchActivity } from "@/lib/perf";
 import { cn, clamp, seeded } from "@/lib/utils";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -21,11 +22,18 @@ gsap.registerPlugin(ScrollTrigger);
  *
  * Sem JS (ou com `prefers-reduced-motion`), tudo fica no estado estático de
  * sempre — os valores inline do render são o próprio fallback.
+ *
+ * Em aparelho de pouco fôlego (`useLowPower`) o desenho continua igual, mas
+ * o movimento encolhe: menos gotas, sem deriva dos planos, sem parallax e sem
+ * o pingo que se desprende. Uma página chega a ter seis nuvens de respingo e
+ * quatro cortinas de escorrido ao mesmo tempo — é a soma delas, e não uma
+ * isolada, que engasga a rolagem no celular.
  */
 
 const r3 = (n: number) => Number(n.toFixed(3));
 
-const NO_MOTION = "(prefers-reduced-motion: no-preference)";
+/** Fração de gotas/filetes mantida no modo econômico. */
+const LOW_POWER_DENSITY = { splatter: 0.45, drips: 0.55 };
 
 /**
  * Parallax vertical ligado à rolagem da página.
@@ -68,7 +76,14 @@ export function Splatter({
   const hostRef = useRef<HTMLDivElement>(null);
   const driftRefs = useRef<(SVGGElement | null)[]>([]);
   const cursorRefs = useRef<(SVGGElement | null)[]>([]);
-  const y = useScrollParallax(-46 * depth);
+  const lowPower = useLowPower();
+  // no celular a nuvem fica parada: mover um SVG desse tamanho obriga a
+  // rasterizá-lo de novo a cada quadro de rolagem
+  const y = useScrollParallax(lowPower ? 0 : -46 * depth);
+
+  const dotCount = lowPower
+    ? Math.round(count * LOW_POWER_DENSITY.splatter)
+    : count;
 
   // três planos de profundidade: as gotas graúdas ficam na frente
   const layers = useMemo(() => {
@@ -82,7 +97,7 @@ export function Splatter({
       pulse: boolean;
     }[][] = [[], [], []];
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < dotCount; i++) {
       const a = seeded(i, seed + 1) * Math.PI * 2;
       // raio com viés para o centro: agrupa perto da origem e rareia longe
       const rad = Math.pow(seeded(i, seed + 2), 1 + density * 2) * 100;
@@ -104,15 +119,17 @@ export function Splatter({
     }
 
     return groups;
-  }, [count, density, seed]);
+  }, [dotCount, density, seed]);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    // no modo econômico a nuvem é só desenho: nem deriva, nem cursor —
+    // são três tweens infinitos por instância, e a página tem várias
+    if (!host || lowPower) return;
 
     const mm = gsap.matchMedia();
 
-    mm.add(NO_MOTION, () => {
+    mm.add(NO_MOTION_QUERY, () => {
       // 1. respiração: cada plano vagueia devagar, em ritmo próprio
       driftRefs.current.forEach((g, i) => {
         if (!g) return;
@@ -172,7 +189,7 @@ export function Splatter({
     });
 
     return () => mm.revert();
-  }, [interactive]);
+  }, [interactive, lowPower]);
 
   return (
     <div
@@ -283,12 +300,18 @@ export function Drips({
   const trailRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const beadRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const dropRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const y = useScrollParallax(-26 * depth);
+  const lowPower = useLowPower();
+  const y = useScrollParallax(lowPower ? 0 : -26 * depth);
+
+  const dripCount = lowPower
+    ? Math.max(4, Math.round(count * LOW_POWER_DENSITY.drips))
+    : count;
 
   const drips = useMemo(
     () =>
-      Array.from({ length: count }, (_, i) => {
-        const left = ((i + 0.5) / count) * 100 + (seeded(i, seed + 5) - 0.5) * 9;
+      Array.from({ length: dripCount }, (_, i) => {
+        const left =
+          ((i + 0.5) / dripCount) * 100 + (seeded(i, seed + 5) - 0.5) * 9;
         return {
           left: r3(left),
           /** comprimento do render estático — é também o fallback sem JS */
@@ -298,7 +321,7 @@ export function Drips({
           delay: r3(seeded(i, seed + 15) * 3.5),
         };
       }),
-    [count, maxLength, seed]
+    [dripCount, maxLength, seed]
   );
 
   useEffect(() => {
@@ -307,7 +330,7 @@ export function Drips({
 
     const mm = gsap.matchMedia();
 
-    mm.add(NO_MOTION, () => {
+    mm.add(NO_MOTION_QUERY, () => {
       const states: DripState[] = drips.map((d) => ({
         p: d.height / maxLength,
         bead: 1,
@@ -353,8 +376,6 @@ export function Drips({
         }
       };
 
-      gsap.ticker.add(render);
-
       // ciclo de vida de cada escorrido
       const timelines = states.map((s, i) => {
         const tl = gsap.timeline({
@@ -383,7 +404,9 @@ export function Drips({
           .to(s, { bead: 1.3, duration: 0.8, ease: "sine.out" }, "<")
           // 6. às vezes o peso vence e um pingo se solta
           .call(() => {
-            if (Math.random() > 0.45) return;
+            // no modo econômico o pingo não existe: é um terceiro elemento
+            // por filete escrevendo transform e opacity a cada quadro
+            if (lowPower || Math.random() > 0.45) return;
             gsap.fromTo(
               s,
               { dropY: 0, dropA: 0.85 },
@@ -410,21 +433,25 @@ export function Drips({
         return tl;
       });
 
-      // a rolagem estica os filetes na proporção da velocidade
-      const st = ScrollTrigger.create({
-        trigger: host,
-        start: "top bottom",
-        end: "bottom top",
-        onUpdate: (self) => {
-          const v = Math.min(Math.abs(self.getVelocity()) / 1800, 1);
-          scroll.boost = Math.max(scroll.boost, v * 0.7);
-        },
-      });
+      // a rolagem estica os filetes na proporção da velocidade. No celular
+      // não: medir velocidade a cada quadro de rolagem é justamente o que
+      // não pode disputar tempo com o scroll nativo
+      const st = lowPower
+        ? null
+        : ScrollTrigger.create({
+            trigger: host,
+            start: "top bottom",
+            end: "bottom top",
+            onUpdate: (self) => {
+              const v = Math.min(Math.abs(self.getVelocity()) / 1800, 1);
+              scroll.boost = Math.max(scroll.boost, v * 0.7);
+            },
+          });
 
       // o cursor apressa quem passa por perto
       let move: ((e: PointerEvent) => void) | null = null;
 
-      if (interactive) {
+      if (interactive && !lowPower) {
         const nudged = states.map(() => false);
 
         move = (e: PointerEvent) => {
@@ -451,16 +478,37 @@ export function Drips({
         window.addEventListener("pointermove", move, { passive: true });
       }
 
+      /*
+       * Escorrido fora da tela é trabalho jogado fora: os do rodapé rodavam
+       * enquanto a pessoa ainda estava no hero. Com a cortina longe da vista,
+       * o laço de render e as linhas do tempo ficam parados.
+       */
+      let running = false;
+
+      const stopWatching = watchActivity(host, (active) => {
+        if (active === running) return;
+        running = active;
+
+        if (active) {
+          gsap.ticker.add(render);
+          timelines.forEach((tl) => tl.resume());
+        } else {
+          gsap.ticker.remove(render);
+          timelines.forEach((tl) => tl.pause());
+        }
+      });
+
       return () => {
+        stopWatching();
         gsap.ticker.remove(render);
         timelines.forEach((tl) => tl.kill());
-        st.kill();
+        st?.kill();
         if (move) window.removeEventListener("pointermove", move);
       };
     });
 
     return () => mm.revert();
-  }, [drips, interactive, maxLength, speed]);
+  }, [drips, interactive, lowPower, maxLength, speed]);
 
   return (
     <div
@@ -511,22 +559,24 @@ export function Drips({
                 transform: `translate3d(-50%, ${d.height}px, 0) scale(1)`,
               }}
             />
-            {/* o pingo que se desprende e cai */}
-            <span
-              ref={(el) => {
-                dropRefs.current[i] = el;
-              }}
-              // sem will-change: o translate3d já promove a camada
-              className="absolute top-0 left-1/2 block rounded-full"
-              style={{
-                width: d.width * 2.1,
-                height: d.width * 2.6,
-                opacity: 0,
-                background:
-                  "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 65%, var(--color-pink-600))",
-                transform: `translate3d(-50%, ${d.height}px, 0)`,
-              }}
-            />
+            {/* o pingo que se desprende e cai (só onde sobra quadro) */}
+            {!lowPower && (
+              <span
+                ref={(el) => {
+                  dropRefs.current[i] = el;
+                }}
+                // sem will-change: o translate3d já promove a camada
+                className="absolute top-0 left-1/2 block rounded-full"
+                style={{
+                  width: d.width * 2.1,
+                  height: d.width * 2.6,
+                  opacity: 0,
+                  background:
+                    "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 65%, var(--color-pink-600))",
+                  transform: `translate3d(-50%, ${d.height}px, 0)`,
+                }}
+              />
+            )}
           </span>
         ))}
       </motion.div>
@@ -561,7 +611,7 @@ export function SprayStroke({ className }: { className?: string }) {
 
     const mm = gsap.matchMedia();
 
-    mm.add(NO_MOTION, () => {
+    mm.add(NO_MOTION_QUERY, () => {
       // o traço se desenha ao entrar na tela, como se fosse pintado agora
       const len = path.getTotalLength();
 

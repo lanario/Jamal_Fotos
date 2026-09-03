@@ -1,0 +1,25 @@
+/* Design tokens — JML Sports / Jamal Fotos (dark-only, street art) */
+:root {
+  /* base */
+  --ink-900:#0A0A0A; --ink-800:#111111; --ink-700:#1A1A1A; --ink-600:#2A2A2A;
+  --white:#FFFFFF;   --white-dim:#E8E8E8; --gray-400:#9A9A9A; --gray-600:#5A5A5A;
+  /* brand */
+  --pink-300:#FF6BB5; --pink-400:#FF2E93; --pink-500:#F0197D; --pink-600:#C9106A;
+  --violet-400:#A455E8; --violet-500:#8B3FD1;
+  /* semantic */
+  --bg:var(--ink-900); --surface:var(--ink-800); --surface-2:var(--ink-700);
+  --border:rgba(240,25,125,.25); --border-strong:var(--pink-500);
+  --text:var(--white); --text-2:var(--gray-400); --accent:var(--pink-500);
+  /* effects */
+  --grad-title:linear-gradient(100deg,#FFF 0%,#FF2E93 35%,#F0197D 60%,#8B3FD1 100%);
+  --glow:0 0 24px rgba(240,25,125,.35);
+  --glow-strong:drop-shadow(0 0 6px #FF2E93) drop-shadow(0 0 24px rgba(240,25,125,.45));
+  /* type */
+  --font-display:"Anton","Archivo Black",system-ui,sans-serif;
+  --font-script:"Permanent Marker","Caveat Brush",cursive;
+  --font-ui:"Inter",system-ui,-apple-system,sans-serif;
+  --font-num:"Barlow Condensed","Oswald",sans-serif;
+  /* radius / motion */
+  --r-card:14px; --r-img:2px;
+  --ease:cubic-bezier(.2,.7,.3,1); --dur-fast:180ms; --dur:320ms;
+}

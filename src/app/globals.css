@@ -1,0 +1,420 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   JML SPORTS — design tokens
+   Ver docs/DESIGN-SYSTEM.md. Dark-only: não existe tema claro.
+   ------------------------------------------------------------------ */
+@theme {
+  /* base */
+  --color-ink-900: #0a0a0a;
+  --color-ink-800: #111111;
+  --color-ink-700: #1a1a1a;
+  --color-ink-600: #2a2a2a;
+  --color-bone: #e8e8e8;
+  --color-ash-400: #9a9a9a;
+  --color-ash-600: #5a5a5a;
+
+  /* marca */
+  --color-pink-300: #ff6bb5;
+  --color-pink-400: #ff2e93;
+  --color-pink-500: #f0197d;
+  --color-pink-600: #c9106a;
+  --color-violet-400: #a455e8;
+  --color-violet-500: #8b3fd1;
+
+  /* tipografia */
+  --font-display: var(--font-anton), "Archivo Black", system-ui, sans-serif;
+  --font-script: var(--font-marker), "Caveat Brush", cursive;
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-num: var(--font-barlow), "Oswald", sans-serif;
+
+  /* raios — é cartaz, não app */
+  --radius-card: 14px;
+  --radius-img: 2px;
+
+  /* motion */
+  --ease-brand: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    background: var(--color-ink-900);
+    color: white;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: var(--color-pink-500);
+    color: white;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-pink-500);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Título com o gradiente da marca (branco → rosa → roxo) */
+  .text-brand-gradient {
+    background-image: linear-gradient(
+      100deg,
+      #ffffff 0%,
+      var(--color-pink-400) 35%,
+      var(--color-pink-500) 60%,
+      var(--color-violet-500) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Letra vazada com contorno rosa — o "outline" do graffiti */
+  .text-outline-pink {
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--color-pink-500);
+    paint-order: stroke fill;
+  }
+
+  @supports not (-webkit-text-stroke: 1px red) {
+    .text-outline-pink {
+      color: var(--color-pink-500);
+    }
+  }
+
+  .glow-pink {
+    filter: drop-shadow(0 0 6px var(--color-pink-400))
+      drop-shadow(0 0 24px rgb(240 25 125 / 0.45));
+  }
+
+  /* Grão de filme / textura de muro — camada global em overlay */
+  .texture-noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Meio-tom (halftone) — a trama de pontos das artes de referência */
+  .texture-halftone {
+    background-image: radial-gradient(
+      var(--color-pink-500) 0.5px,
+      transparent 0.6px
+    );
+    background-size: 4px 4px;
+  }
+
+  .perspective-none {
+    perspective: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Respingos vivos.
+   O pulso das gotas graúdas fica em CSS, não em GSAP: são dezenas por
+   nuvem, e um keyframe com `animation-delay` negativo entrega cada uma
+   num ponto diferente do ciclo sem custar nada de JS por quadro.
+   (O bloco de prefers-reduced-motion lá embaixo já zera isto.)
+   ------------------------------------------------------------------ */
+@keyframes spray-dot-pulse {
+  0%,
+  100% {
+    opacity: var(--dot-o, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    opacity: calc(var(--dot-o, 0.5) * 0.35);
+    transform: scale(1.4);
+  }
+}
+
+.spray-dot {
+  /* sem isto o `scale` usaria a origem do SVG inteiro, não a da gota */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spray-dot-pulse var(--dot-dur, 6s) ease-in-out var(--dot-delay, 0s)
+    infinite;
+}
+
+/* ------------------------------------------------------------------
+   Peças da esfera de campeonatos.
+   Preto e branco em repouso, cor e moldura rosa no hover — a mesma regra
+   que o sistema define para a grade de portfólio. `transform`, `opacity` e
+   `z-index` são do laço em JS; aqui ficam só filtro e moldura.
+   ------------------------------------------------------------------ */
+@layer components {
+  .sphere-tile {
+    position: absolute;
+    overflow: hidden;
+    /* redondas: cada bolha é a capa de um evento */
+    border-radius: 50%;
+    opacity: 0;
+    cursor: pointer;
+    filter: grayscale(1);
+    box-shadow: 0 0 0 1px rgb(240 25 125 / 0.25);
+    will-change: transform;
+    transition:
+      filter 0.3s var(--ease-brand),
+      box-shadow 0.3s var(--ease-brand);
+  }
+
+  .sphere-tile:hover,
+  .sphere-tile.is-active {
+    filter: grayscale(0);
+    box-shadow:
+      0 0 0 2px var(--color-pink-500),
+      0 0 26px rgb(240 25 125 / 0.45);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Botão animado (base: Uiverse.io / gharsh11032000).
+   Adaptado ao sistema: rosa da marca no lugar do greenyellow, tipografia
+   display em caixa alta e, no hover, a pílula vira retângulo de 14px — o
+   raio de card do sistema ("é cartaz, não app").
+
+   Fica em @layer components para que utilitários do Tailwind aplicados no
+   mesmo elemento (w-full, justify-center) continuem vencendo.
+   ------------------------------------------------------------------ */
+@layer components {
+  .btn-animated {
+    position: relative;
+    /* inline-flex, não flex: como `flex` é block-level, o botão esticaria
+       para a largura da coluna inteira no desktop */
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    padding: 16px 36px;
+    border: 4px solid transparent;
+    border-radius: 100px;
+    background-color: transparent;
+    box-shadow: 0 0 0 2px var(--color-pink-500);
+    color: var(--color-pink-500);
+    font-family: var(--font-display);
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .btn-animated svg {
+    position: absolute;
+    z-index: 9;
+    width: 22px;
+    height: 22px;
+    transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .btn-animated .icon-in {
+    right: 20px;
+  }
+
+  .btn-animated .icon-out {
+    left: -25%;
+  }
+
+  /*
+    O original anima width/height do círculo, o que refaz layout a cada
+    quadro. Aqui ele é fixo e cresce em `scale` (compositor) — e o fator é
+    grande o bastante para cobrir também o botão de largura cheia do mobile.
+  */
+  .btn-animated .circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: var(--color-pink-500);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+    transition:
+      transform 0.8s cubic-bezier(0.23, 1, 0.32, 1),
+      opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .btn-animated .label {
+    position: relative;
+    z-index: 1;
+    transform: translateX(-12px);
+    transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .btn-animated:hover,
+  .btn-animated:focus-visible {
+    border-radius: var(--radius-card);
+    box-shadow: 0 0 0 12px transparent;
+    color: var(--color-ink-900);
+  }
+
+  .btn-animated:hover .icon-in,
+  .btn-animated:focus-visible .icon-in {
+    right: -25%;
+  }
+
+  .btn-animated:hover .icon-out,
+  .btn-animated:focus-visible .icon-out {
+    left: 20px;
+  }
+
+  .btn-animated:hover .label,
+  .btn-animated:focus-visible .label {
+    transform: translateX(12px);
+  }
+
+  .btn-animated:hover .circle,
+  .btn-animated:focus-visible .circle {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(22);
+  }
+
+  .btn-animated:active {
+    scale: 0.97;
+    box-shadow: 0 0 0 4px var(--color-pink-500);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Entrada da navbar.
+   Em CSS, e não em JS: o GSAP controla o `translateY` do <header> para o
+   auto-hide, então a entrada precisa viver numa camada separada — e uma
+   animação CSS sempre termina no estado final, mesmo se a aba for
+   escondida no meio do caminho (com JS, a barra ficaria presa fora da tela).
+   ------------------------------------------------------------------ */
+@keyframes nav-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-enter {
+  animation: nav-enter 0.7s var(--ease-brand) 0.15s both;
+}
+
+/* ------------------------------------------------------------------
+   Chave do menu mobile (base: Uiverse.io / adamgiebl).
+   Adaptado: barras no rosa da marca e caixa de 48px em vez de 60px —
+   60px com barras de 6px pesa demais ao lado do wordmark. As durações
+   e a mecânica (barra do meio some, extremas viram X, tudo gira 180°)
+   são as do original.
+   ------------------------------------------------------------------ */
+.nav-toggle-input {
+  display: none;
+}
+
+.nav-toggle {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition-duration: 0.5s;
+}
+
+.nav-toggle .bar {
+  width: 100%;
+  height: 5px;
+  background-color: var(--color-pink-500);
+  border-radius: 6px;
+  box-shadow: 0 0 12px rgb(240 25 125 / 0.45);
+}
+
+.nav-toggle .bar-mid {
+  transition-duration: 0.8s;
+}
+
+.nav-toggle .bar-top,
+.nav-toggle .bar-bottom {
+  width: 80%;
+}
+
+.nav-toggle-input:checked + .nav-toggle .bar {
+  position: absolute;
+  transition-duration: 0.5s;
+}
+
+.nav-toggle-input:checked + .nav-toggle .bar-mid {
+  transform: scaleX(0);
+  transition-duration: 0.5s;
+}
+
+.nav-toggle-input:checked + .nav-toggle .bar-top {
+  width: 100%;
+  transform: rotate(45deg);
+  transition-duration: 0.5s;
+}
+
+.nav-toggle-input:checked + .nav-toggle .bar-bottom {
+  width: 100%;
+  transform: rotate(-45deg);
+  transition-duration: 0.5s;
+}
+
+.nav-toggle-input:checked + .nav-toggle {
+  transition-duration: 0.5s;
+  transform: rotate(180deg);
+}
+
+/* o input está escondido, então o foco tem que aparecer na chave */
+.nav-toggle-input:focus-visible + .nav-toggle {
+  outline: 2px solid var(--color-pink-500);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Galeria 3D — escala das fotos por breakpoint.
+   Em telas estreitas as fotos precisam ser maiores (e mais afastadas
+   do centro) para o túnel não virar um punhado de selos.
+   ------------------------------------------------------------------ */
+.gallery-3d {
+  --photo-scale: 1;
+  --photo-spread: 1;
+}
+
+@media (max-width: 640px) {
+  .gallery-3d {
+    --photo-scale: 1.95;
+    --photo-spread: 1.2;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .gallery-3d {
+    --photo-scale: 1.35;
+    --photo-spread: 1.08;
+  }
+}

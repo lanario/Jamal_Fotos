@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import gsap from "gsap";
 
 import { SprayStroke } from "@/components/ui/spray";
 import { perfTier } from "@/lib/perf";
 
-const LETTERS = ["J", "M", "L"];
-
 /**
- * Lockup central do hero: assinatura "Jamal", wordmark JML em gradiente
+ * Lockup central do hero: o grafite "Jamal / JML" como imagem única
  * e a tagline da marca. Entra com stagger via GSAP.
- *
- * O gradiente é fatiado entre as letras (background-size 300%) para ler
- * como UM gradiente contínuo, e não três repetidos.
  */
 export default function HeroTitle() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -27,46 +23,39 @@ export default function HeroTitle() {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-      const letters = gsap.utils.toArray<HTMLElement>("[data-anim='letter']");
+      const logo = root.querySelector<HTMLElement>("[data-anim='logo']");
 
       // o `will-change` entra só durante a entrada e sai no fim: mantê-lo
-      // ligado prenderia três camadas de GPU do tamanho da tela pelo resto
+      // ligado prenderia uma camada de GPU do tamanho da tela pelo resto
       // da sessão, e é a galeria que precisa desse orçamento
       /*
-       * O desfoque de entrada é lindo e é caro: cada letra ocupa um quarto da
-       * tela e, desfocada, é rasterizada de novo a cada quadro da entrada —
+       * O desfoque de entrada é lindo e é caro: o grafite ocupa boa parte da
+       * tela e, desfocado, é rasterizado de novo a cada quadro da entrada —
        * justamente quando o túnel está montando e as fotos decodificando. Na
-       * máquina fraca a letra entra sem desfoque; o movimento é o mesmo.
+       * máquina fraca ele entra sem desfoque; o movimento é o mesmo.
        */
       const soft = perfTier() !== "low";
 
-      letters.forEach((el) => {
-        el.style.willChange = soft
+      if (logo) {
+        logo.style.willChange = soft
           ? "transform, filter, opacity"
           : "transform, opacity";
-      });
+      }
 
-      tl.from(letters, {
+      tl.from("[data-anim='logo']", {
         opacity: 0,
-        yPercent: 55,
+        yPercent: 12,
         scale: 0.9,
         ...(soft ? { filter: "blur(12px)" } : null),
-        duration: 0.9,
-        stagger: 0.1,
+        duration: 1,
         onComplete: () => {
-          letters.forEach((el) => {
-            el.style.willChange = "";
-            // o GSAP deixa `filter: blur(0px)` no inline; sem limpar, a letra
-            // continua sendo rasterizada como camada filtrada
-            el.style.filter = "";
-          });
+          if (!logo) return;
+          logo.style.willChange = "";
+          // o GSAP deixa `filter: blur(0px)` no inline; sem limpar, a imagem
+          // continua sendo rasterizada como camada filtrada
+          logo.style.filter = "";
         },
       })
-        .from(
-          "[data-anim='script']",
-          { opacity: 0, y: 14, rotate: -12, scale: 0.8, duration: 0.6 },
-          "-=0.35"
-        )
         .from(
           "[data-anim='stroke']",
           {
@@ -79,7 +68,7 @@ export default function HeroTitle() {
         )
         .from(
           "[data-anim='sports']",
-          { opacity: 0, y: 10, letterSpacing: "1.4em", duration: 0.8 },
+          { opacity: 0, y: 10, letterSpacing: "0.7em", duration: 0.8 },
           "-=0.55"
         )
         .from("[data-anim='tagline']", { opacity: 0, y: 10, duration: 0.6 }, "-=0.4");
@@ -107,34 +96,33 @@ export default function HeroTitle() {
       <h1 className="contents">
         <span className="sr-only">JML Sports — fotografia esportiva por Jamal</span>
 
-        {/* assinatura pichada, encaixada acima do wordmark */}
-        <span
-          data-anim="script"
-          aria-hidden
-          className="glow-pink font-script mb-1 block -rotate-3 text-xl text-pink-400 sm:text-2xl md:mb-2 md:text-3xl"
-        >
-          Jamal
-        </span>
+        {/*
+          O grafite não está centralizado dentro do próprio PNG: sobram 52px de
+          transparência à esquerda contra 3px à direita, então o centro da arte
+          cai 24px (3.74% da largura) à direita do centro do arquivo. Centralizar
+          a imagem centraliza o arquivo, não o desenho — daí o empurrão para a
+          esquerda, que alinha a arte com o "SPORTS" abaixo.
 
-        {/* wordmark */}
+          A largura é travada também em svh (76svh ≈ 46svh × 642/388) em vez de
+          um max-height: assim a caixa nunca fica maior que a imagem, e o
+          deslocamento em % continua sendo % da arte.
+        */}
         <span
+          data-anim="logo"
           aria-hidden
-          className="flex items-baseline justify-center"
+          className="block w-[min(82vw,36rem,76svh)]"
           style={{ filter: "drop-shadow(0 6px 28px rgb(0 0 0 / 0.85))" }}
         >
-          {LETTERS.map((letter, i) => (
-            <span
-              key={letter}
-              data-anim="letter"
-              className="text-brand-gradient font-display block text-[26vw] leading-[0.82] tracking-[-0.045em] sm:text-[21vw] md:text-[15vw] lg:text-[13rem]"
-              style={{
-                backgroundSize: "300% 100%",
-                backgroundPosition: `${(i / (LETTERS.length - 1)) * 100}% 0`,
-              }}
-            >
-              {letter}
-            </span>
-          ))}
+          <Image
+            src="/jamal_grafite.png"
+            alt=""
+            width={642}
+            height={388}
+            priority
+            sizes="(max-width: 640px) 82vw, 36rem"
+            className="h-auto w-full max-w-none select-none"
+            style={{ transform: "translateX(-3.74%)" }}
+          />
         </span>
       </h1>
 
@@ -144,10 +132,10 @@ export default function HeroTitle() {
 
       <p
         data-anim="sports"
-        className="font-display mt-2 text-sm tracking-[0.6em] text-white/90 sm:text-base md:text-lg"
+        className="font-display mt-2 text-[0.6rem] tracking-[0.34em] text-white/90 uppercase sm:text-xs sm:tracking-[0.4em] md:text-sm"
         style={{ textShadow: "0 2px 16px rgb(0 0 0 / 0.9)" }}
       >
-        SPORTS
+        Fotografia Esportiva
       </p>
 
       <p
@@ -155,9 +143,7 @@ export default function HeroTitle() {
         className="font-num mt-5 text-[11px] font-semibold tracking-[0.24em] text-ash-400 uppercase sm:text-xs"
         style={{ textShadow: "0 2px 14px rgb(0 0 0 / 0.95)" }}
       >
-        Foco, agilidade e excelência
-        <span className="mx-2 text-pink-500">/</span>
-        Fotografia esportiva
+        Congelando histórias além do tatame
       </p>
     </div>
   );

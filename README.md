@@ -92,7 +92,7 @@ com o nome invadindo a coluna da direita.
 - ScrollTrigger: revelação do retrato em `clip-path`, parallax interno da foto,
   entrada do nome linha a linha, traço de spray e bio em stagger.
 - Framer Motion cuida das entradas simples (`whileInView`): olho da seção e os
-  três pilares FOCO / AGILIDADE / EXCELÊNCIA.
+  a tagline CONGELANDO HISTÓRIAS ALÉM DO TATAME.
 
 O retrato sai de `public/pictures/jamal_imagem.jpg`, mas é **excluído do túnel
 do hero** pelo mapa `PORTRAITS` em `scripts/optimize-images.mjs`; ele vira

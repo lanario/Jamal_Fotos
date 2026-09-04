@@ -368,8 +368,8 @@ export default function Footer() {
             </ul>
 
             <p className="font-num mt-6 text-[11px] leading-relaxed font-semibold tracking-[0.24em] text-ash-600 uppercase">
-              Foco <span className="text-pink-500/70">/</span> Agilidade{" "}
-              <span className="text-pink-500/70">/</span> Excelência
+              Congelando histórias{" "}
+              <span className="text-pink-500/70">/</span> além do tatame
             </p>
           </motion.div>
         </motion.div>

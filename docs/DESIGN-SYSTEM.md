@@ -15,7 +15,7 @@ Portfólio de **fotógrafo esportivo** (foco em Jiu-Jitsu / BJJ) com linguagem
 - Fotos entram como o "conteúdo limpo" dentro dessa moldura suja — a arte
   emoldura, nunca compete com a foto.
 
-Tagline oficial (vista na arte): **"FOCO, AGILIDADE E EXCELÊNCIA"** ·
+Tagline oficial: **"CONGELANDO HISTÓRIAS ALÉM DO TATAME"** ·
 **"FOTOGRAFIA ESPORTIVA"** · **"COBERTURA ESPORTIVA"**.
 
 ## 2. Paleta

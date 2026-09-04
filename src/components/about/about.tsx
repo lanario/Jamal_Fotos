@@ -20,10 +20,10 @@ gsap.registerPlugin(ScrollTrigger);
 const BIO = [
   "Jamal é fotógrafo esportivo e fez da beira do tatame o seu lugar de trabalho. Acompanha campeonatos de Jiu-Jitsu por todo o Rio de Janeiro, do primeiro combate da manhã à final que ninguém quer perder.",
   "O trabalho não é registrar o resultado: é achar o instante em que a luta vira. A queda, o encaixe, o olhar de quem sabe que venceu antes do árbitro levantar o braço.",
-  "Foco, agilidade e excelência não são um slogan: são a única forma de não deixar passar o que acontece em dois segundos.",
+  "Congelar histórias além do tatame não é um slogan: é a única forma de não deixar passar o que acontece em dois segundos.",
 ];
 
-const PILLARS = ["Foco", "Agilidade", "Excelência"];
+const TAGLINE = "Congelando histórias além do tatame";
 
 export default function About() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -263,33 +263,16 @@ export default function About() {
               </div>
             </div>
 
-            {/* os três pilares da marca */}
-            <motion.ul
-              initial="hidden"
-              whileInView="shown"
+            {/* a tagline da marca */}
+            <motion.p
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-10%" }}
-              variants={{ shown: { transition: { staggerChildren: 0.1 } } }}
-              className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-3 sm:mt-12 sm:gap-x-6"
+              transition={{ duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
+              className="font-num mt-9 text-[11px] font-semibold tracking-[0.28em] text-white/85 uppercase sm:mt-12 sm:text-xs"
             >
-              {PILLARS.map((pillar, i) => (
-                <motion.li
-                  key={pillar}
-                  variants={{
-                    hidden: { opacity: 0, y: 14 },
-                    shown: { opacity: 1, y: 0 },
-                  }}
-                  transition={{ duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
-                  className="font-num flex items-center gap-4 text-[11px] font-semibold tracking-[0.28em] text-white/85 uppercase sm:text-xs"
-                >
-                  {i > 0 && (
-                    <span className="text-pink-500/70" aria-hidden>
-                      /
-                    </span>
-                  )}
-                  {pillar}
-                </motion.li>
-              ))}
-            </motion.ul>
+              {TAGLINE}
+            </motion.p>
           </div>
         </div>
       </div>

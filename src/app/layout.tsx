@@ -36,12 +36,12 @@ const barlow = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "JML Sports — Fotografia Esportiva | Jamal",
   description:
-    "Foco, agilidade e excelência. Cobertura fotográfica de campeonatos de Jiu-Jitsu e esportes de combate no Rio de Janeiro.",
+    "Congelando histórias além do tatame. Cobertura fotográfica de campeonatos de Jiu-Jitsu e esportes de combate no Rio de Janeiro.",
   // favicon e apple-icon vêm da convenção do App Router (src/app/icon.png e
   // apple-icon.png, gerados por `npm run images` a partir de logo_bg.png)
   openGraph: {
     title: "JML Sports — Fotografia Esportiva",
-    description: "Foco, agilidade e excelência. Cobertura esportiva por Jamal.",
+    description: "Congelando histórias além do tatame. Cobertura esportiva por Jamal.",
     type: "website",
   },
 };

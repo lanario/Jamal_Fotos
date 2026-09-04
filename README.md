@@ -64,7 +64,7 @@ Túnel 3D infinito de fotos com o wordmark **JML** ancorado no centro.
 | `images` | — | manifesto de `src/data/gallery.ts` |
 | `speed` | `1.2` | unidades por segundo no auto-play |
 | `zSpacing` | `3` | distância entre fotos consecutivas |
-| `visibleCount` | `12` | quantas fotos cabem na janela do túnel |
+| `visibleCount` | `12` | quantas fotos cabem na janela do túnel (o nível de desempenho aperta este teto) |
 | `falloff` | `{near: .8, far: 14}` | bandas de fade na câmera e ao fundo |
 | `idleDelay` | `3000` | ms até o auto-play voltar |
 
@@ -123,6 +123,82 @@ O deep link é lido de `location.search` num efeito de montagem, e **não** com 
 Suspense e faz a subárvore renderizar de novo no cliente — a esfera montava
 duas vezes, só uma das montagens via o parâmetro, e o link abria a galeria uma
 vez sim, outra não. Sem ele, `/portfolio` também volta a ser pré-renderizada.
+
+## Desempenho — os três níveis
+
+O site é pesado de propósito. Em máquina boa isso é a identidade da marca; num
+PC fraco vira travamento, e um site que engasga não passa a impressão de
+qualidade que o portfólio precisa passar. Então o peso é **regulável**, e quem
+regula é `src/lib/perf.ts`.
+
+| nível | quem cai aqui | o que muda |
+|---|---|---|
+| `high` | máquina folgada | tudo como projetado |
+| `mid` | ≤ 4 núcleos ou ≤ 4 GB, ou quem pediu menos movimento | menos camadas por quadro |
+| `low` | ≤ 2 núcleos, ≤ 2 GB, economia de dados, tela lenta — **ou quem foi medido engasgando** | só o essencial |
+
+### Como o nível é decidido
+
+1. **Palpite**, na hidratação: núcleos, memória, `saveData`, `(update: slow)`,
+   `prefers-reduced-motion`. Barato e imediato, mas mente — um PC de 4 núcleos
+   e 8 GB pode ter uma GPU integrada terrível.
+2. **Medida**: um cão de guarda cronometra os quadros de verdade por até 25 s.
+   A cada 90 quadros ele tira a mediana; passando de 21 ms (≈ 48 fps), rebaixa
+   um degrau. É esta etapa que pega o PC fraco que o palpite deixou passar.
+
+O nível **só desce**, nunca sobe, e fica guardado na sessão: ir para
+`/portfolio` já começa no nível medido, sem precisar engasgar de novo. O
+resultado sai em `<html data-perf="...">`, que é por onde o CSS lê.
+
+> Para testar um nível à mão, no console:
+> `sessionStorage.setItem("jml:perf-tier", "low")` e recarregue.
+
+### O que sai em cada corte
+
+Os cortes seguem uma regra só: **a composição não muda de leitura, o custo por
+quadro é que cai**. Nada de esconder seção ou trocar cor — o que sai é filtro,
+mistura de camadas, desfoque e elemento repetido, que é o que obriga o
+navegador a rasterizar de novo.
+
+- **Túnel do hero** — 26 fotos em camada dupla (P&B embaixo, colorida
+  acendendo por cima) viram 16 e depois 9, sempre em camada simples: a foto
+  passa a ser sempre colorida em vez de acender, e a rasterização por foto cai
+  pela metade. O laço também ganha teto de 32 fps no `low` — 30 fps
+  **constantes** passam sensação de fluidez muito melhor do que 45 que
+  despencam para 18 sem aviso.
+- **Respingos e escorridos** — a nuvem cai para 55% e depois 30% das gotas
+  (corte no fim da lista: afina, não muda de desenho). Fora do `high` somem a
+  deriva, o cursor, o parallax e o pulso das gotas graúdas: tudo isso mexe
+  dentro do SVG, e SVG não é composto em camadas — mexer é repintar tudo.
+- **Barra de navegação** — o `backdrop-blur` é o item mais caro da página: a
+  barra é fixa, então cada quadro de rolagem desfoca de novo tudo que passa
+  atrás dela. Fora do `high` ela vira fundo sólido.
+- **Rodapé** — o wordmark gigante deixa de animar `letter-spacing` no scrub.
+  É propriedade de *layout*: remedia a palavra inteira a cada quadro.
+- **Tiras de eventos** — `flex-grow` (layout) e `grayscale` (filtro) são as
+  duas transições mais caras do site; no `low` elas encurtam de 500/700 ms
+  para 200 ms. A tira ainda abre e ainda ganha cor, num tempo que a máquina
+  paga.
+- **Esfera do portfólio** — teto de 32 fps e halo de hover sem desfoque.
+- **Enfeite entra depois** — fora do `high`, respingos e escorridos esperam a
+  máquina ficar ociosa (`requestIdleCallback`, teto de 2 s) em vez de montarem
+  centenas de nós justo nos quadros da entrada do lockup.
+
+### Mexendo nisso
+
+Componente novo que precise pesar menos:
+
+```tsx
+const tier = usePerfTier();          // null no servidor e na hidratação
+const passos = byTier(tier, { high: 40, mid: 24, low: 12 });
+```
+
+`usePerfTier` devolve `null` no servidor **e no primeiro render do cliente** —
+é o que faz a hidratação bater. Quem usa o nível para decidir *quantos
+elementos criar* trata `null` como "ainda não": o HTML do servidor sai leve e
+a decoração entra no render seguinte. Dentro de um efeito de animação de
+entrada, use `perfTier()` (imperativo) em vez do hook, senão o efeito roda
+duas vezes e a entrada toca, é desfeita e toca de novo.
 
 ## Próximas seções
 

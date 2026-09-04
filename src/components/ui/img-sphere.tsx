@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 
+import { perfTier } from "@/lib/perf";
 import { cn, clamp } from "@/lib/utils";
 
 /**
@@ -201,6 +202,21 @@ export default function SphereImageGrid({
       }
 
       const now = performance.now();
+
+      /*
+       * Teto de quadros no modo econômico. A esfera projeta ~50 peças por
+       * quadro e escreve transform/opacity/z-index em cada uma; a 30 fps o
+       * giro continua contínuo (é movimento lento e constante) e sobra
+       * metade do orçamento para a rolagem da página.
+       *
+       * Lido a cada quadro de propósito: o nível pode cair no meio da visita,
+       * e a esfera acompanha sem precisar remontar.
+       */
+      if (perfTier() === "low" && now - last < 1000 / 32) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
       // em "quadros de 60fps", para a velocidade não depender do monitor
       const dt = Math.min(4, (now - last) / 16.667);
       last = now;

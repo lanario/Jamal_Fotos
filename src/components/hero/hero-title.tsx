@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 
 import { SprayStroke } from "@/components/ui/spray";
+import { perfTier } from "@/lib/perf";
 
 const LETTERS = ["J", "M", "L"];
 
@@ -31,15 +32,25 @@ export default function HeroTitle() {
       // o `will-change` entra só durante a entrada e sai no fim: mantê-lo
       // ligado prenderia três camadas de GPU do tamanho da tela pelo resto
       // da sessão, e é a galeria que precisa desse orçamento
+      /*
+       * O desfoque de entrada é lindo e é caro: cada letra ocupa um quarto da
+       * tela e, desfocada, é rasterizada de novo a cada quadro da entrada —
+       * justamente quando o túnel está montando e as fotos decodificando. Na
+       * máquina fraca a letra entra sem desfoque; o movimento é o mesmo.
+       */
+      const soft = perfTier() !== "low";
+
       letters.forEach((el) => {
-        el.style.willChange = "transform, filter, opacity";
+        el.style.willChange = soft
+          ? "transform, filter, opacity"
+          : "transform, opacity";
       });
 
       tl.from(letters, {
         opacity: 0,
         yPercent: 55,
         scale: 0.9,
-        filter: "blur(12px)",
+        ...(soft ? { filter: "blur(12px)" } : null),
         duration: 0.9,
         stagger: 0.1,
         onComplete: () => {
@@ -75,6 +86,7 @@ export default function HeroTitle() {
     }, root);
 
     return () => ctx.revert();
+    // uma vez só, na montagem: a entrada não toca de novo
   }, []);
 
   return (

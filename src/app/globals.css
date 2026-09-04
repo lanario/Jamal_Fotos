@@ -437,20 +437,94 @@
    do centro) para o túnel não virar um punhado de selos.
    ------------------------------------------------------------------ */
 .gallery-3d {
-  --photo-scale: 1;
+  /* `--photo-scale-boost` vem do <html data-perf>: no modo econômico o túnel
+     tem menos fotos, e elas crescem um pouco para o quadro não esvaziar */
+  --photo-scale: calc(1 * var(--photo-scale-boost, 1));
   --photo-spread: 1;
 }
 
 @media (max-width: 640px) {
   .gallery-3d {
-    --photo-scale: 1.95;
+    --photo-scale: calc(1.95 * var(--photo-scale-boost, 1));
     --photo-spread: 1.2;
   }
 }
 
 @media (min-width: 641px) and (max-width: 1024px) {
   .gallery-3d {
-    --photo-scale: 1.35;
+    --photo-scale: calc(1.35 * var(--photo-scale-boost, 1));
     --photo-spread: 1.08;
   }
+}
+
+/* ------------------------------------------------------------------
+   Modo econômico — `<html data-perf="mid|low">`.
+
+   Quem escreve esse atributo é `src/lib/perf.ts`: ele mede os quadros e
+   rebaixa o nível quando a máquina não está dando conta. Aqui ficam os
+   cortes que são só de CSS; os que mudam quantos elementos existem estão
+   nos próprios componentes.
+
+   A regra do corte: **composição igual, custo por quadro menor**. Nada de
+   esconder seções ou trocar cores — o que sai é filtro, mistura de camadas
+   e desfoque, que é o que obriga o navegador a rasterizar de novo.
+   ------------------------------------------------------------------ */
+
+/*
+  Desfoque de fundo é o item mais caro da página inteira: a barra fica presa
+  no topo, então cada quadro de rolagem manda o navegador desfocar tudo o que
+  passa por trás dela. Fora daqui, `bg-ink-900/95` já entrega a mesma leitura.
+*/
+[data-perf="mid"] [class*="backdrop-blur"],
+[data-perf="low"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-perf="low"] {
+  /* o túnel fica com fotos maiores e menos numerosas: sem isso a redução do
+     número de fotos deixaria o quadro vazio */
+  --photo-scale-boost: 1.18;
+}
+
+/* `mix-blend-mode` obriga a reler o que está atrás para misturar. O grão
+   sozinho, por opacidade, entrega quase o mesmo muro. */
+[data-perf="mid"] .texture-noise::after,
+[data-perf="low"] .texture-noise::after {
+  mix-blend-mode: normal;
+  opacity: 0.05;
+}
+
+/* o pulso das gotas graúdas repinta a nuvem inteira a cada quadro */
+[data-perf="low"] .spray-dot {
+  animation: none;
+}
+
+/* `drop-shadow` é um filtro: rasteriza a letra de novo a cada repintura.
+   `text-shadow` pinta na mesma passada. */
+[data-perf="low"] .glow-pink {
+  filter: none;
+  text-shadow:
+    0 0 8px var(--color-pink-400),
+    0 0 22px rgb(240 25 125 / 0.45);
+}
+
+/* halo grande = área de desfoque grande. A moldura sozinha ainda "acende". */
+[data-perf="low"] .sphere-tile {
+  transition: none;
+  will-change: auto;
+}
+
+[data-perf="low"] .sphere-tile:hover,
+[data-perf="low"] .sphere-tile.is-active {
+  box-shadow: 0 0 0 2px var(--color-pink-500);
+}
+
+/* o círculo do botão cresce 22x cobrindo a tela toda; num PC fraco isso
+   sozinho come o quadro do hover */
+[data-perf="low"] .btn-animated,
+[data-perf="low"] .btn-animated svg,
+[data-perf="low"] .btn-animated .label,
+[data-perf="low"] .btn-animated .circle {
+  transition-duration: 0.25s;
 }

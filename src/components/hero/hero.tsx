@@ -10,6 +10,7 @@ import InfiniteGallery, {
 import { Drips, Splatter } from "@/components/ui/spray";
 import HeroTitle from "@/components/hero/hero-title";
 import { galleryImages } from "@/data/gallery";
+import { usePerfTier } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -17,6 +18,18 @@ gsap.registerPlugin(ScrollTrigger);
 const SCROLL_UNITS = 16;
 
 export default function Hero() {
+  const tier = usePerfTier();
+
+  /*
+   * O hero empilha, no mesmo quadro: túnel de fotos, duas nuvens de respingo,
+   * dois planos de escorrido, vinheta, grão e o lockup. Numa máquina fraca a
+   * conta não fecha — e o que sai primeiro são as camadas repetidas: a segunda
+   * nuvem e o plano de tinta de trás. A composição não muda de leitura
+   * (respingo nos cantos, tinta escorrendo do topo), só deixa de ser pintada
+   * duas vezes.
+   */
+  const layered = tier !== "low";
+
   const sectionRef = useRef<HTMLElement>(null);
   const lockupRef = useRef<HTMLDivElement>(null);
   const fadeRef = useRef<HTMLDivElement>(null);
@@ -131,27 +144,31 @@ export default function Hero() {
           depth={1.2}
           className="-top-[16%] -left-[14%] h-[60vh] w-[45vw] opacity-60"
         />
-        <Splatter
-          seed={9}
-          count={140}
-          depth={0.7}
-          className="-right-[16%] -bottom-[18%] h-[55vh] w-[42vw] opacity-50"
-        />
+        {layered && (
+          <Splatter
+            seed={9}
+            count={140}
+            depth={0.7}
+            className="-right-[16%] -bottom-[18%] h-[55vh] w-[42vw] opacity-50"
+          />
+        )}
 
         {/* dois planos de tinta: o de trás corre devagar e desfocado, o da
             frente é o que reage ao cursor e à velocidade da rolagem */}
-        <Drips
-          seed={17}
-          count={7}
-          maxLength={280}
-          speed={0.65}
-          depth={0.25}
-          interactive={false}
-          // sem `blur-[1.5px]`: o filtro cai sobre uma camada que se move a
-          // cada quadro, e desfocar exige rasterizar tudo de novo. A opacidade
-          // mais baixa entrega a mesma sensação de profundidade.
-          className="inset-x-0 top-0 h-[38vh] opacity-30"
-        />
+        {layered && (
+          <Drips
+            seed={17}
+            count={7}
+            maxLength={280}
+            speed={0.65}
+            depth={0.25}
+            interactive={false}
+            // sem `blur-[1.5px]`: o filtro cai sobre uma camada que se move a
+            // cada quadro, e desfocar exige rasterizar tudo de novo. A opacidade
+            // mais baixa entrega a mesma sensação de profundidade.
+            className="inset-x-0 top-0 h-[38vh] opacity-30"
+          />
+        )}
         <Drips
           seed={2}
           count={11}

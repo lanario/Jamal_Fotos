@@ -5,6 +5,7 @@ import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
+import { byTier, perfTier, useDecorReady, usePerfTier } from "@/lib/perf";
 import { cn, clamp, seeded } from "@/lib/utils";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -120,6 +121,29 @@ export function Splatter({
   const cursorRefs = useRef<(SVGGElement | null)[]>([]);
   const y = useScrollParallax(-46 * depth);
   const rect = useCachedRect(hostRef);
+  const tier = usePerfTier();
+  const ready = useDecorReady();
+
+  /*
+   * Cada gota é um <circle> de verdade — numa home com cinco nuvens dá quase
+   * mil nós, e o SVG não é composto em camadas: qualquer coisa que se mexa
+   * dentro dele repinta o conjunto inteiro. Então o tamanho da nuvem é o
+   * primeiro botão a girar quando a máquina é fraca.
+   *
+   * O corte é sempre no fim da lista (mesma semente, mesmo prefixo), então a
+   * nuvem afina — não muda de desenho.
+   */
+  const dots =
+    tier === null || !ready
+      ? 0
+      : Math.max(
+          30,
+          Math.round(count * byTier(tier, { high: 1, mid: 0.55, low: 0.3 }))
+        );
+
+  /* deriva, cursor e parallax só onde sobra quadro: os três mexem no <g> ou
+     no invólucro da nuvem, e mexer é repintar as gotas todas de novo */
+  const alive = tier === "high";
 
   // três planos de profundidade: as gotas graúdas ficam na frente
   const layers = useMemo(() => {
@@ -133,7 +157,7 @@ export function Splatter({
       pulse: boolean;
     }[][] = [[], [], []];
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < dots; i++) {
       const a = seeded(i, seed + 1) * Math.PI * 2;
       // raio com viés para o centro: agrupa perto da origem e rareia longe
       const rad = Math.pow(seeded(i, seed + 2), 1 + density * 2) * 100;
@@ -155,11 +179,11 @@ export function Splatter({
     }
 
     return groups;
-  }, [count, density, seed]);
+  }, [dots, density, seed]);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || !alive) return;
 
     const mm = gsap.matchMedia();
 
@@ -223,7 +247,69 @@ export function Splatter({
     });
 
     return () => mm.revert();
-  }, [interactive, rect]);
+  }, [alive, interactive, rect]);
+
+  /*
+   * Enquanto não sabemos em que máquina estamos (servidor e primeiro render),
+   * a nuvem não existe: assim o HTML do servidor não carrega mil círculos que
+   * talvez sejam trezentos no cliente — e a hidratação bate sozinha.
+   */
+  if (!dots) {
+    return (
+      <div
+        ref={hostRef}
+        aria-hidden
+        className={cn("pointer-events-none absolute", className)}
+        {...rest}
+      />
+    );
+  }
+
+  const cloud = (
+    <svg
+      viewBox="0 0 100 100"
+      preserveAspectRatio="xMidYMid slice"
+      className="h-full w-full overflow-visible"
+    >
+      {layers.map((group, li) => (
+        // dois <g>: um para a deriva, outro para o cursor — o GSAP não
+        // anima duas fontes de transform no mesmo elemento
+        <g
+          key={li}
+          ref={(el) => {
+            driftRefs.current[li] = el;
+          }}
+        >
+          <g
+            ref={(el) => {
+              cursorRefs.current[li] = el;
+            }}
+          >
+            {group.map((d, i) => (
+              <circle
+                key={i}
+                cx={d.cx}
+                cy={d.cy}
+                r={d.r}
+                fill="var(--color-pink-500)"
+                opacity={d.o}
+                className={d.pulse && alive ? "spray-dot" : undefined}
+                style={
+                  d.pulse && alive
+                    ? ({
+                        "--dot-o": d.o,
+                        "--dot-dur": `${d.dur}s`,
+                        "--dot-delay": `${d.delay}s`,
+                      } as React.CSSProperties)
+                    : undefined
+                }
+              />
+            ))}
+          </g>
+        </g>
+      ))}
+    </svg>
+  );
 
   return (
     <div
@@ -232,51 +318,18 @@ export function Splatter({
       className={cn("pointer-events-none absolute", className)}
       {...rest}
     >
-      <motion.div style={{ y }} className="h-full w-full">
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="xMidYMid slice"
-          className="h-full w-full overflow-visible"
-        >
-          {layers.map((dots, li) => (
-            // dois <g>: um para a deriva, outro para o cursor — o GSAP não
-            // anima duas fontes de transform no mesmo elemento
-            <g
-              key={li}
-              ref={(el) => {
-                driftRefs.current[li] = el;
-              }}
-            >
-              <g
-                ref={(el) => {
-                  cursorRefs.current[li] = el;
-                }}
-              >
-                {dots.map((d, i) => (
-                  <circle
-                    key={i}
-                    cx={d.cx}
-                    cy={d.cy}
-                    r={d.r}
-                    fill="var(--color-pink-500)"
-                    opacity={d.o}
-                    className={d.pulse ? "spray-dot" : undefined}
-                    style={
-                      d.pulse
-                        ? ({
-                            "--dot-o": d.o,
-                            "--dot-dur": `${d.dur}s`,
-                            "--dot-delay": `${d.delay}s`,
-                          } as React.CSSProperties)
-                        : undefined
-                    }
-                  />
-                ))}
-              </g>
-            </g>
-          ))}
-        </svg>
-      </motion.div>
+      {/*
+        Sem parallax a nuvem é pintada uma vez e nunca mais. Com ele, o
+        invólucro anda a cada quadro de rolagem e arrasta o SVG junto — por
+        isso ele só existe onde há quadro sobrando.
+      */}
+      {alive ? (
+        <motion.div style={{ y }} className="h-full w-full">
+          {cloud}
+        </motion.div>
+      ) : (
+        <div className="h-full w-full">{cloud}</div>
+      )}
     </div>
   );
 }
@@ -336,10 +389,27 @@ export function Drips({
   const dropRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const y = useScrollParallax(-26 * depth);
   const rect = useCachedRect(hostRef);
+  const tier = usePerfTier();
+  const ready = useDecorReady();
+
+  /* menos filetes na máquina fraca: cada um é um laço de física com três
+     elementos e uma timeline própria */
+  const lines =
+    tier === null || !ready
+      ? 0
+      : Math.max(
+          4,
+          Math.round(count * byTier(tier, { high: 1, mid: 0.7, low: 0.5 }))
+        );
+
+  /* no nível mais baixo a tinta fica pintada, não escorrendo: o desenho
+     continua o mesmo, o quadro é que deixa de ser disputado */
+  const flows = tier === "high" || tier === "mid";
+  const parallax = tier === "high";
 
   const drips = useMemo(
     () =>
-      Array.from({ length: count }, (_, i) => {
+      Array.from({ length: lines }, (_, i) => {
         const left = ((i + 0.5) / count) * 100 + (seeded(i, seed + 5) - 0.5) * 9;
         return {
           left: r3(left),
@@ -350,12 +420,12 @@ export function Drips({
           delay: r3(seeded(i, seed + 15) * 3.5),
         };
       }),
-    [count, maxLength, seed]
+    [lines, maxLength, seed]
   );
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || !flows) return;
 
     const mm = gsap.matchMedia();
 
@@ -541,7 +611,87 @@ export function Drips({
     });
 
     return () => mm.revert();
-  }, [drips, interactive, maxLength, speed, rect]);
+  }, [drips, flows, interactive, maxLength, speed, rect]);
+
+  // idem à nuvem: nada de escorrido no HTML do servidor, senão o número de
+  // filetes mudaria na hidratação
+  if (!lines) {
+    return (
+      <div
+        ref={hostRef}
+        aria-hidden
+        className={cn("pointer-events-none absolute", className)}
+      />
+    );
+  }
+
+  const paint = (
+    <>
+      {drips.map((d, i) => (
+        <span
+          key={i}
+          className="absolute top-0 block"
+          style={{
+            left: `${d.left}%`,
+            width: d.width,
+            opacity: d.opacity,
+          }}
+        >
+          {/* o filete: altura fixa, comprimento pelo scaleY */}
+          <span
+            ref={(el) => {
+              trailRefs.current[i] = el;
+            }}
+            className={cn(
+              "block w-full origin-top",
+              flows && "will-change-transform"
+            )}
+            style={{
+              height: maxLength,
+              borderRadius: "0 0 999px 999px",
+              background:
+                "linear-gradient(to bottom, rgb(201 16 106 / 0.95), rgb(240 25 125) 45%, rgb(255 46 147))",
+              boxShadow: "0 0 6px rgb(240 25 125 / 0.6)",
+              transform: `scaleY(${r3(d.height / maxLength)}) scaleX(1)`,
+            }}
+          />
+          {/* a gota que se forma na ponta */}
+          <span
+            ref={(el) => {
+              beadRefs.current[i] = el;
+            }}
+            // sem will-change: o translate3d já promove a camada
+            className="absolute top-0 left-1/2 block rounded-full"
+            style={{
+              width: d.width * 2.6,
+              height: d.width * 3.1,
+              marginTop: -d.width * 1.8,
+              background:
+                "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 62%, var(--color-pink-600))",
+              boxShadow: "0 0 8px rgb(240 25 125 / 0.65)",
+              transform: `translate3d(-50%, ${d.height}px, 0) scale(1)`,
+            }}
+          />
+          {/* o pingo que se desprende e cai */}
+          <span
+            ref={(el) => {
+              dropRefs.current[i] = el;
+            }}
+            // sem will-change: o translate3d já promove a camada
+            className="absolute top-0 left-1/2 block rounded-full"
+            style={{
+              width: d.width * 2.1,
+              height: d.width * 2.6,
+              opacity: 0,
+              background:
+                "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 65%, var(--color-pink-600))",
+              transform: `translate3d(-50%, ${d.height}px, 0)`,
+            }}
+          />
+        </span>
+      ))}
+    </>
+  );
 
   return (
     <div
@@ -549,68 +699,13 @@ export function Drips({
       aria-hidden
       className={cn("pointer-events-none absolute", className)}
     >
-      <motion.div style={{ y }} className="absolute inset-0">
-        {drips.map((d, i) => (
-          <span
-            key={i}
-            className="absolute top-0 block"
-            style={{
-              left: `${d.left}%`,
-              width: d.width,
-              opacity: d.opacity,
-            }}
-          >
-            {/* o filete: altura fixa, comprimento pelo scaleY */}
-            <span
-              ref={(el) => {
-                trailRefs.current[i] = el;
-              }}
-              className="block w-full origin-top will-change-transform"
-              style={{
-                height: maxLength,
-                borderRadius: "0 0 999px 999px",
-                background:
-                  "linear-gradient(to bottom, rgb(201 16 106 / 0.95), rgb(240 25 125) 45%, rgb(255 46 147))",
-                boxShadow: "0 0 6px rgb(240 25 125 / 0.6)",
-                transform: `scaleY(${r3(d.height / maxLength)}) scaleX(1)`,
-              }}
-            />
-            {/* a gota que se forma na ponta */}
-            <span
-              ref={(el) => {
-                beadRefs.current[i] = el;
-              }}
-              // sem will-change: o translate3d já promove a camada
-              className="absolute top-0 left-1/2 block rounded-full"
-              style={{
-                width: d.width * 2.6,
-                height: d.width * 3.1,
-                marginTop: -d.width * 1.8,
-                background:
-                  "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 62%, var(--color-pink-600))",
-                boxShadow: "0 0 8px rgb(240 25 125 / 0.65)",
-                transform: `translate3d(-50%, ${d.height}px, 0) scale(1)`,
-              }}
-            />
-            {/* o pingo que se desprende e cai */}
-            <span
-              ref={(el) => {
-                dropRefs.current[i] = el;
-              }}
-              // sem will-change: o translate3d já promove a camada
-              className="absolute top-0 left-1/2 block rounded-full"
-              style={{
-                width: d.width * 2.1,
-                height: d.width * 2.6,
-                opacity: 0,
-                background:
-                  "radial-gradient(circle at 34% 28%, rgb(255 158 208), var(--color-pink-500) 65%, var(--color-pink-600))",
-                transform: `translate3d(-50%, ${d.height}px, 0)`,
-              }}
-            />
-          </span>
-        ))}
-      </motion.div>
+      {parallax ? (
+        <motion.div style={{ y }} className="absolute inset-0">
+          {paint}
+        </motion.div>
+      ) : (
+        <div className="absolute inset-0">{paint}</div>
+      )}
     </div>
   );
 }
@@ -638,7 +733,9 @@ export function SprayStroke({ className }: { className?: string }) {
 
   useEffect(() => {
     const path = pathRef.current;
-    if (!path) return;
+    // no modo econômico o traço já nasce pintado: `getTotalLength()` força
+    // um cálculo de layout, e o dash animado repinta o SVG a cada quadro
+    if (!path || perfTier() === "low") return;
 
     const mm = gsap.matchMedia();
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Anton, Barlow_Condensed, Inter, Permanent_Marker } from "next/font/google";
 
 import Navbar from "@/components/nav/navbar";
+import PerfBoot from "@/components/perf/perf-boot";
 import SocialFab from "@/components/ui/social-fab";
 import "./globals.css";
 
@@ -59,6 +60,7 @@ export default function RootLayout({
       className={`${anton.variable} ${marker.variable} ${inter.variable} ${barlow.variable}`}
     >
       <body className="bg-ink-900 text-white antialiased">
+        <PerfBoot />
         <Navbar />
         {children}
         <SocialFab />

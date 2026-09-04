@@ -12,6 +12,7 @@ import gsap from "gsap";
 
 import type { GalleryImage } from "@/lib/types";
 import { useIsomorphicLayoutEffect } from "@/lib/hooks";
+import { byTier, usePerfTier } from "@/lib/perf";
 import { cn, clamp, invLerp, mod, seeded } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ *
@@ -28,6 +29,21 @@ const GOLDEN_ANGLE = 2.399963229728653;
 const DAMPING = 5.5;
 /** Raio minimo das fotos: mantem o centro livre para o wordmark. */
 const CLEAR_ZONE = 0.32;
+
+/**
+ * Quantas fotos o HTML do servidor carrega. O numero verdadeiro depende da
+ * maquina — e so o cliente sabe qual e —, entao o servidor manda o menor
+ * denominador comum e o cliente completa depois de hidratar. Menor que
+ * qualquer nivel: assim ninguem precisa *remover* foto na hidratacao.
+ */
+const SSR_PHOTOS = 8;
+
+/**
+ * Quadro minimo por nivel, em ms. Numa maquina fraca 30 fps CONSTANTES
+ * passam sensacao de fluidez muito melhor do que 45 fps que despencam para
+ * 18 sem aviso — e o quadro que sobra fica para a rolagem da pagina.
+ */
+const FRAME_BUDGET = { high: 0, mid: 0, low: 1000 / 32 };
 
 type Placement = {
   x: number; // vw a partir do centro
@@ -82,6 +98,41 @@ export default function InfiniteGallery({
   className,
   ref,
 }: InfiniteGalleryProps) {
+  const tier = usePerfTier();
+
+  /*
+   * Cada foto do tunel e uma camada composta pela GPU — e, no nivel completo,
+   * DUAS (a preto e branco por baixo, a colorida acendendo por cima). Numa
+   * placa integrada isso e exatamente o que estoura o orcamento do quadro,
+   * entao o nivel mexe em tres coisas, nesta ordem de impacto:
+   *
+   *   1. quantas fotos existem     (menos textura para decodificar e compor)
+   *   2. camada dupla ou simples   (metade da rasterizacao por foto)
+   *   3. tamanho das sombras       (area de desfoque a repintar)
+   */
+  const shown = Math.min(
+    images.length,
+    tier ? byTier(tier, { high: images.length, mid: 16, low: 9 }) : SSR_PHOTOS
+  );
+
+  const photos = useMemo(() => images.slice(0, shown), [images, shown]);
+
+  /** Camada colorida separada so onde ha quadro sobrando para ela. */
+  const dual = tier === "high" || tier === null;
+
+  const frameShadow = byTier(tier, {
+    high: "0 18px 60px rgb(0 0 0 / 0.65)",
+    mid: "0 12px 34px rgb(0 0 0 / 0.6)",
+    low: "0 8px 18px rgb(0 0 0 / 0.5)",
+  });
+
+  const glowShadow = byTier(tier, {
+    high: "0 0 44px rgb(240 25 125 / 0.38)",
+    mid: "0 0 26px rgb(240 25 125 / 0.32)",
+    // sem halo: a moldura acesa sozinha ja marca a foto que esta na frente
+    low: "none",
+  });
+
   const rootRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   /** Camada colorida por cima da versao P&B — so a opacidade dela anima. */
@@ -108,10 +159,17 @@ export default function InfiniteGallery({
    */
   const view = useRef({ w: 0, h: 0, spread: 1 });
 
-  const placements = useMemo(() => images.map((_, i) => placeImage(i)), [images]);
+  const placements = useMemo(() => photos.map((_, i) => placeImage(i)), [photos]);
 
-  const total = images.length * zSpacing;
-  const windowDepth = Math.min(visibleCount * zSpacing, total);
+  /* menos fotos na cena tambem quer dizer janela mais curta: com a janela
+     original o tunel ficaria com buracos no lugar das fotos que sairam */
+  const visible = Math.min(
+    visibleCount,
+    byTier(tier, { high: visibleCount, mid: 9, low: 7 })
+  );
+
+  const total = photos.length * zSpacing;
+  const windowDepth = Math.min(visible * zSpacing, total);
   const fadeIn = Math.min(falloff.far, windowDepth * 0.9);
   const fadeOut = falloff.near;
 
@@ -272,7 +330,7 @@ export default function InfiniteGallery({
   }, []);
 
   useEffect(() => {
-    if (images.length === 0) return;
+    if (photos.length === 0) return;
 
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reduced = motion.matches;
@@ -285,11 +343,20 @@ export default function InfiniteGallery({
 
     /* ---------------- loop ---------------- */
 
+    const budget = byTier(tier, FRAME_BUDGET);
+    let prev = performance.now();
+
     const tick = () => {
       if (!onScreen.current || document.hidden) return;
 
       const now = performance.now();
-      const dt = Math.min(gsap.ticker.deltaRatio(60) / 60, 0.05);
+
+      // teto de quadros do nivel: pula o tique sem consumir o tempo, para o
+      // amortecimento continuar contando os milissegundos de verdade
+      if (budget && now - prev < budget) return;
+
+      const dt = Math.min((now - prev) / 1000, 0.05);
+      prev = now;
 
       if (!reduced && now - lastInput.current > idleDelay) {
         target.current += speed * dt;
@@ -314,7 +381,7 @@ export default function InfiniteGallery({
       gsap.ticker.remove(tick);
       motion.removeEventListener("change", onMotion);
     };
-  }, [images.length, speed, idleDelay, layout]);
+  }, [photos.length, speed, idleDelay, layout, tier]);
 
   return (
     <div
@@ -331,7 +398,7 @@ export default function InfiniteGallery({
         className="absolute inset-0 grid place-items-center"
         style={{ transformStyle: "preserve-3d" }}
       >
-        {images.map((img, i) => {
+        {photos.map((img, i) => {
           const p = placements[i]!;
           const sizes = "(max-width: 768px) 60vw, 34vw";
           return (
@@ -358,48 +425,60 @@ export default function InfiniteGallery({
                 {/* recorte da foto; as molduras ficam fora dele para que o
                     halo e a sombra possam vazar */}
                 <div className="rounded-img absolute inset-0 overflow-hidden">
-                {/* base: preto e branco, estatica */}
-                <Image
-                  src={img.src}
-                  alt={img.alt}
-                  fill
-                  sizes={sizes}
-                  placeholder={img.blurDataURL ? "blur" : "empty"}
-                  blurDataURL={img.blurDataURL}
-                  priority={i < 4}
-                  className="object-cover"
-                  style={{ filter: "grayscale(1) contrast(1.05)" }}
-                  draggable={false}
-                />
-
-                {/* mesma foto em cor: acende pela opacidade, sem repintura */}
-                <div
-                  ref={(el) => {
-                    colorRefs.current[i] = el;
-                  }}
-                  aria-hidden
-                  className="absolute inset-0"
-                  style={{ opacity: 0 }}
-                >
+                  {/*
+                    Base da foto. No nivel completo ela e a versao preto e
+                    branco e a cor entra por cima; nos outros ela JA e a
+                    colorida, sem filtro nenhum — a foto some do preto e
+                    branco, mas o custo por quadro cai pela metade e a
+                    fotografia, que e o produto, aparece igual.
+                  */}
                   <Image
                     src={img.src}
-                    alt=""
+                    alt={img.alt}
                     fill
                     sizes={sizes}
+                    placeholder={img.blurDataURL ? "blur" : "empty"}
+                    blurDataURL={img.blurDataURL}
                     priority={i < 4}
                     className="object-cover"
-                    style={{ filter: "contrast(1.05)" }}
+                    style={
+                      dual
+                        ? { filter: "grayscale(1) contrast(1.05)" }
+                        : { filter: "contrast(1.05)" }
+                    }
                     draggable={false}
                   />
-                </div>
 
-                {/* trama de meio-tom por cima da foto, como nas artes.
-                    Sem `mix-blend-mode`: misturar exige reler o fundo a cada
-                    quadro, e o fundo aqui e um tunel em movimento. */}
-                <div
-                  aria-hidden
-                  className="texture-halftone pointer-events-none absolute inset-0 opacity-[0.05]"
-                />
+                  {/* mesma foto em cor: acende pela opacidade, sem repintura */}
+                  {dual && (
+                    <div
+                      ref={(el) => {
+                        colorRefs.current[i] = el;
+                      }}
+                      aria-hidden
+                      className="absolute inset-0"
+                      style={{ opacity: 0 }}
+                    >
+                      <Image
+                        src={img.src}
+                        alt=""
+                        fill
+                        sizes={sizes}
+                        priority={i < 4}
+                        className="object-cover"
+                        style={{ filter: "contrast(1.05)" }}
+                        draggable={false}
+                      />
+                    </div>
+                  )}
+
+                  {/* trama de meio-tom por cima da foto, como nas artes.
+                      Sem `mix-blend-mode`: misturar exige reler o fundo a cada
+                      quadro, e o fundo aqui e um tunel em movimento. */}
+                  <div
+                    aria-hidden
+                    className="texture-halftone pointer-events-none absolute inset-0 opacity-[0.05]"
+                  />
                 </div>
 
                 {/* moldura de base, sempre visivel */}
@@ -408,7 +487,7 @@ export default function InfiniteGallery({
                   className="rounded-img pointer-events-none absolute inset-0"
                   style={{
                     border: "1px solid rgb(240 25 125 / 0.18)",
-                    boxShadow: "0 18px 60px rgb(0 0 0 / 0.65)",
+                    boxShadow: frameShadow,
                   }}
                 />
 
@@ -422,7 +501,7 @@ export default function InfiniteGallery({
                   style={{
                     opacity: 0,
                     border: "1px solid rgb(240 25 125 / 0.73)",
-                    boxShadow: "0 0 44px rgb(240 25 125 / 0.38)",
+                    boxShadow: glowShadow,
                   }}
                 />
               </div>

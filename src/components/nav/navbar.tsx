@@ -12,6 +12,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SlideTabs, type SlideTab } from "@/components/ui/slide-tabs";
 import { Drips, Splatter } from "@/components/ui/spray";
 import { navItems, type NavItem } from "@/data/nav";
+import { usePerfTier } from "@/lib/perf";
 import { socialLinks } from "@/data/social";
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
@@ -28,6 +29,7 @@ const reduceMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export default function Navbar() {
+  const tier = usePerfTier();
   const pathname = usePathname();
   const router = useRouter();
   const headerRef = useRef<HTMLElement>(null);
@@ -179,9 +181,18 @@ export default function Navbar() {
       {/* o <header> é do GSAP (auto-hide); a entrada vive na camada de dentro */}
       <header ref={headerRef} className="fixed inset-x-0 top-0 z-50">
         <div
+          /*
+            A barra fica presa no topo: enquanto a página rola, TUDO o que
+            passa por trás dela é desfocado de novo, quadro a quadro. É o
+            item mais caro da página numa placa integrada — então, fora do
+            nível completo, ela vira fundo sólido. A leitura é a mesma; o
+            que some é a conta.
+          */
           className={`nav-enter transition-[background-color,border-color,backdrop-filter] duration-300 ${
             solid && !open
-              ? "border-b border-ink-600/80 bg-ink-900/80 backdrop-blur-md"
+              ? tier === "high" || tier === null
+                ? "border-b border-ink-600/80 bg-ink-900/80 backdrop-blur-md"
+                : "border-b border-ink-600/80 bg-ink-900/95"
               : "border-b border-transparent bg-transparent"
           }`}
         >
@@ -247,6 +258,7 @@ export default function Navbar() {
       <MobileMenu
         open={open}
         active={active}
+        painted={tier !== "low"}
         onNavigate={goTo}
         onClose={() => setOpen(false)}
       />
@@ -259,11 +271,19 @@ export default function Navbar() {
 type MobileMenuProps = {
   open: boolean;
   active: number;
+  /** Respingos e escorridos no painel — desligados no modo econômico. */
+  painted: boolean;
   onNavigate: (item: NavItem) => (event?: React.MouseEvent) => void;
   onClose: () => void;
 };
 
-function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
+function MobileMenu({
+  open,
+  active,
+  painted,
+  onNavigate,
+  onClose,
+}: MobileMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   /*
@@ -282,7 +302,7 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
   // os respingos e escorridos entram por GSAP, fora do ciclo do framer
   useEffect(() => {
     const panel = panelRef.current;
-    if (!decor || !panel || reduceMotion()) return;
+    if (!decor || !painted || !panel || reduceMotion()) return;
 
     const ctx = gsap.context(() => {
       gsap.from("[data-menu='drips']", {
@@ -301,7 +321,7 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
     }, panel);
 
     return () => ctx.revert();
-  }, [decor]);
+  }, [decor, painted]);
 
   return (
     <AnimatePresence>
@@ -328,7 +348,7 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
              `mix-blend-mode` mandaria reler o fundo a cada quadro da subida */
           className="texture-noise-flat fixed inset-0 z-40 flex flex-col overflow-x-hidden overflow-y-auto bg-ink-900 will-change-transform md:hidden"
         >
-          {decor && (
+          {decor && painted && (
             <>
               <div
                 data-menu="drips"

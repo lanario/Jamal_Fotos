@@ -10,6 +10,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Drips, Splatter, SprayStroke } from "@/components/ui/spray";
 import { footerArt } from "@/data/art";
 import { navItems } from "@/data/nav";
+import { perfTier } from "@/lib/perf";
 import { WHATSAPP_DISPLAY, socialLinks } from "@/data/social";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -38,6 +39,9 @@ export default function Footer() {
     if (!footer) return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const tier = perfTier();
+    const heavy = tier === "high" || tier === null;
 
     const ctx = gsap.context(() => {
       // a arte é um cartaz sendo colado: revela de baixo para cima
@@ -81,25 +85,39 @@ export default function Footer() {
       });
 
       // respingos com parallax leve, para o fundo não ficar estático
-      gsap.to("[data-footer='splat']", {
-        yPercent: -22,
-        ease: "none",
-        scrollTrigger: {
-          trigger: footer,
-          start: "top bottom",
-          end: "bottom bottom",
-          scrub: 0.9,
-        },
-      });
+      if (heavy) {
+        gsap.to("[data-footer='splat']", {
+          yPercent: -22,
+          ease: "none",
+          scrollTrigger: {
+            trigger: footer,
+            start: "top bottom",
+            end: "bottom bottom",
+            scrub: 0.9,
+          },
+        });
+      }
 
-      // wordmark gigante: desliza e vai abrindo o tracking com o scroll
+      /*
+       * Wordmark gigante: desliza e vai abrindo o tracking com o scroll.
+       *
+       * `letterSpacing` é propriedade de LAYOUT — animá-la em scrub obriga o
+       * navegador a remedir e reposicionar a palavra inteira a cada quadro de
+       * rolagem, e ela ocupa a largura da tela. Numa máquina fraca é um dos
+       * pontos onde a rolagem trava de forma mais visível, então lá o
+       * movimento fica só no que roda no compositor.
+       */
       gsap.fromTo(
         "[data-footer='wordmark']",
-        { xPercent: -4, opacity: 0.2, letterSpacing: "0.05em" },
+        {
+          xPercent: -4,
+          opacity: 0.2,
+          ...(heavy ? { letterSpacing: "0.05em" } : null),
+        },
         {
           xPercent: 2,
           opacity: 1,
-          letterSpacing: "-0.03em",
+          ...(heavy ? { letterSpacing: "-0.03em" } : null),
           ease: "none",
           scrollTrigger: {
             trigger: "[data-footer='wordmark']",

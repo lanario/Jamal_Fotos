@@ -12,7 +12,7 @@ const EASE_BRAND = [0.2, 0.7, 0.3, 1] as const;
 /** Uma tira por evento — a primeira foto do conjunto é a capa. */
 const strips: GalleryStrip[] = championships.map((championship) => ({
   id: championship.slug,
-  // leva direto para a galeria daquele campeonato, já aberta
+  // destino da seta da tira: a galeria daquele campeonato, já aberta
   href: `/portfolio?evento=${championship.slug}`,
   image: championship.photos[0],
   title: championship.name,

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import gsap from "gsap";
 
 import { socialLinks } from "@/data/social";
+import { perfTier } from "@/lib/perf";
 
 const EASE_BRAND = [0.2, 0.7, 0.3, 1] as const;
 
@@ -41,6 +42,14 @@ export default function SocialFab() {
     const root = rootRef.current;
     // com o menu aberto o botão já tem a atenção: nada de pulsar por baixo
     if (!root || open || reduceMotion()) return;
+
+    /*
+     * O halo é uma animação infinita num elemento fixo: enquanto ela roda, o
+     * navegador nunca fica ocioso e repinta aquele canto a cada quadro —
+     * inclusive durante a rolagem, disputando o quadro com o túnel. Numa
+     * máquina fraca o botão fica parado; ele já é rosa no canto da tela.
+     */
+    if (perfTier() === "low") return;
 
     const ctx = gsap.context(() => {
       // halos saindo do botão, como a onda de um respingo

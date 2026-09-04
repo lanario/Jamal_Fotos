@@ -8,6 +8,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 import { Splatter, SprayStroke } from "@/components/ui/spray";
 import { jamalPortrait } from "@/data/portrait";
+import { perfTier } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -34,6 +35,8 @@ export default function About() {
     if (!section) return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const heavy = perfTier() !== "low";
 
     const ctx = gsap.context(() => {
       // retrato: revela de baixo para cima como um cartaz sendo colado
@@ -100,17 +103,23 @@ export default function About() {
         scrollTrigger: { trigger: "[data-about='bio']", start: "top 88%" },
       });
 
-      // respingos com parallax leve, para o fundo não ficar estático
-      gsap.to("[data-about='splat']", {
-        yPercent: -18,
-        ease: "none",
-        scrollTrigger: {
-          trigger: section,
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 0.8,
-        },
-      });
+      /*
+       * Respingos com parallax leve, para o fundo não ficar estático.
+       * Fora do modo econômico: mover a nuvem obriga a repintar as centenas
+       * de gotas a cada quadro de rolagem.
+       */
+      if (heavy) {
+        gsap.to("[data-about='splat']", {
+          yPercent: -18,
+          ease: "none",
+          scrollTrigger: {
+            trigger: section,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 0.8,
+          },
+        });
+      }
     }, section);
 
     return () => ctx.revert();

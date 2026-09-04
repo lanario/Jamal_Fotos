@@ -101,7 +101,15 @@ export default function EventGalleryModal({
                   </div>
 
                   <div className="flex flex-1 items-center justify-center py-10 sm:py-14">
+                    {/*
+                      `key` pelo slug: o ImgStack guarda a ordem das cartas em
+                      estado inicializado só na montagem. Trocar de evento com
+                      o modal aberto reaproveitaria a ordem do evento anterior
+                      — inofensivo enquanto todos têm 3 fotos, mas um índice
+                      fora do intervalo assim que os conjuntos reais chegarem.
+                    */}
                     <ImgStack
+                      key={championship.slug}
                       images={championship.photos}
                       eventName={championship.name}
                     />

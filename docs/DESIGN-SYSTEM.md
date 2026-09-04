@@ -251,32 +251,50 @@ Base: Uiverse.io / gharsh11032000. Adaptações:
 - Vive em `@layer components` para que utilitários do Tailwind aplicados no
   mesmo elemento continuem vencendo na cascata.
 
-### Portfólio — esfera de campeonatos
 
-`src/components/ui/img-sphere.tsx` distribui as peças numa **esfera de
-Fibonacci** e projeta cada uma em 2D a cada quadro.
+### Portfólio — esfera de eventos + galeria
+
+**Uma bolha por campeonato.** `src/components/ui/img-sphere.tsx` distribui as
+capas numa **esfera de Fibonacci** e projeta cada uma em 2D a cada quadro.
+Apontar mostra o nome; clicar abre a galeria daquele evento.
 
 - Nada de `transform-style: preserve-3d`: as fotos precisam ficar sempre de
-  frente para quem olha. A projeção manual (`perspective / (perspective - z)`)
-  também dá controle sobre profundidade, opacidade e ordem de pilha.
-- O laço escreve só `transform`, `opacity` e `z-index`, direto no DOM. Com ~50
-  peças, re-renderizar o React a 60fps seria desperdício. Filtro e moldura
-  ficam na classe `.sphere-tile` (globals.css), trocada por evento — não por
-  quadro.
-- Preto e branco em repouso, cor e moldura rosa no hover ou no evento em foco:
-  é a regra que o sistema define para a grade de portfólio.
-- **Densidade por breakpoint:** 52 peças no desktop, 26 no celular
-  (`sphereTiles` / `sphereTilesCompact`). Em 375px as 52 se cobrem e a esfera
-  vira um borrão. A troca só acontece depois de montar — decidir pela largura
-  no SSR quebraria a hidratação.
-- `touch-action: pan-y`: arrastar de lado gira a esfera, arrastar para cima
-  ainda rola a página. Travar tudo prenderia o dedo do usuário num quadrado.
+  frente. A projeção manual (`perspective / (perspective - z)`) também dá
+  controle sobre profundidade, opacidade e ordem de pilha. Com só 9 bolhas, é
+  essa profundidade (focal curta, 680) que faz o conjunto ler como esfera.
+- O laço escreve só `transform`, `opacity` e `z-index`, direto no DOM. Filtro
+  e moldura ficam na classe `.sphere-tile`, trocada por evento — não por
+  quadro. Preto e branco em repouso, cor e moldura rosa no hover.
+- **`isolate` no palco é obrigatório.** O laço dá z-index de 1000+ às bolhas
+  para ordená-las por profundidade; sem um contexto de empilhamento próprio
+  esses valores competem na raiz e passam por cima de qualquer modal.
+- O rótulo do hover é **um elemento só**, reposicionado pelo laço sobre a
+  bolha apontada. Um rótulo por bolha herdaria o `scale()` dela e o texto
+  sairia deformado.
+- `touch-action: pan-y`: arrastar de lado gira, arrastar para cima ainda rola
+  a página.
+
+**Galeria (`event-gallery-modal.tsx` + `ui/image-stack.tsx`).** Pilha de
+cartas arrastáveis (base: image-stack do 21st.dev), em carta escura com
+moldura rosa e raio de 2px.
+
+- O original só responde a arrasto, o que deixa a galeria inacessível por
+  teclado. Os botões de avançar/voltar fazem a mesma coisa, com contador em
+  `aria-live`; o arrasto virou atalho.
+- As cartas de trás saem para a esquerda, então a pilha inteira anda um pouco
+  para a direita — senão o leque encosta na borda da tela no celular.
+- O modal usa **Radix Dialog**: foco preso, Escape, rolagem travada e o resto
+  da página marcado com `aria-hidden` saem de graça. O painel tem fundo
+  próprio (`bg-ink-900`), e não só o do overlay: ocupando a tela inteira, se
+  dependesse da camada de trás qualquer tropeço na animação deixaria a esfera
+  aparecendo por baixo.
 
 **Acessibilidade:** a esfera é `aria-hidden`. Quem navega por teclado ou
-leitor de tela usa a lista de eventos ao lado, que é a mesma fonte de verdade
-— apontar um item acende as peças correspondentes.
+leitor de tela usa a lista de eventos ao lado, que abre exatamente as mesmas
+galerias.
 
 **As fotos por evento ainda são provisórias.** `src/data/championships.ts`
 reparte o acervo geral em rodízio entre os 9 campeonatos, de forma
-determinística (nada de `Math.random()`, que quebraria a hidratação). Quando
-chegarem os conjuntos reais, é só trocar a montagem de `photos`.
+determinística (nada de `Math.random()`, que quebraria a hidratação), e a
+primeira foto de cada conjunto vira a capa da bolha. Quando chegarem os
+conjuntos reais, é só trocar a montagem de `photos`.

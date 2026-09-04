@@ -76,16 +76,35 @@ export default function Navbar() {
     const header = headerRef.current;
     if (!header) return;
 
+    /*
+     * `onUpdate` roda a cada quadro de rolagem, então nada aqui pode custar:
+     * antes, cada quadro criava um tween novo e chamava `setSolid` de novo —
+     * sessenta tweens e sessenta renders do React por segundo enquanto o
+     * usuário rolava, competindo com o túnel do hero pelo mesmo quadro.
+     * Agora só o que de fato mudou dispara trabalho.
+     */
+    let hidden: boolean | null = null;
+    let isSolid: boolean | null = null;
+
     const trigger = ScrollTrigger.create({
       start: 0,
       end: "max",
       onUpdate: (self) => {
         const y = self.scroll();
-        setSolid(y > 40);
+
+        const nextSolid = y > 40;
+        if (nextSolid !== isSolid) {
+          isSolid = nextSolid;
+          setSolid(nextSolid);
+        }
 
         // esconde ao descer, revela ao subir — mas nunca com o menu aberto
         if (open || reduceMotion()) return;
+
         const hide = self.direction === 1 && y > 240;
+        if (hide === hidden) return;
+        hidden = hide;
+
         gsap.to(header, {
           yPercent: hide ? -130 : 0,
           duration: 0.45,

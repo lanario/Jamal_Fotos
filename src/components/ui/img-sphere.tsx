@@ -48,6 +48,12 @@ export type SphereImageGridProps = {
   className?: string;
 };
 
+/**
+ * Caminho total do ponteiro, em px, ainda considerado toque e nao arrasto.
+ * Generoso de proposito: dedo treme, mouse nao.
+ */
+const TAP_SLOP = 10;
+
 const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -79,6 +85,12 @@ export default function SphereImageGrid({
   const pointer = useRef({ x: 0, y: 0 });
   const dragDelta = useRef(0);
   const hovered = useRef<number | null>(null);
+  /**
+   * Bolha que recebeu o `pointerdown`. É ela quem decide o clique — e não
+   * `hovered` — porque `setPointerCapture` dispara `pointerleave` na bolha
+   * pressionada, zerando `hovered` antes mesmo do `pointerup` chegar.
+   */
+  const pressed = useRef<number | null>(null);
   const activeRef = useRef<string | null>(activeGroup);
   /** 0 → 1 durante a entrada; multiplica a opacidade das peças. */
   const intro = useRef({ v: 0 });
@@ -145,9 +157,31 @@ export default function SphereImageGrid({
   const tileSize = size * baseImageScale * (size < 480 ? 1.2 : 1);
 
   useEffect(() => {
+    const stage = stageRef.current;
     const reduce = prefersReducedMotion();
     let raf = 0;
     let last = performance.now();
+
+    /*
+     * A esfera fica no meio da página do portfólio: sem isto, o laço seguia
+     * projetando ~50 peças e escrevendo transform/opacity/z-index nelas
+     * mesmo com a seção fora da tela — quadro roubado de quem está rolando.
+     */
+    let visible = true;
+    const io = stage?.parentElement
+      ? new IntersectionObserver(
+          ([entry]) => {
+            visible = entry.isIntersecting;
+            // sem isto o `dt` do primeiro quadro após a volta seria enorme
+            last = performance.now();
+          },
+          { rootMargin: "10% 0px" }
+        )
+      : null;
+    if (io && stage?.parentElement) io.observe(stage.parentElement);
+
+    /** Último valor escrito por peça — nada de reescrever o mesmo estilo. */
+    const written = images.map(() => ({ t: "", z: "", o: "" }));
 
     // entrada: as peças surgem em vez de aparecerem prontas
     const tween = reduce
@@ -155,6 +189,11 @@ export default function SphereImageGrid({
       : gsap.to(intro.current, { v: 1, duration: 1.1, ease: "power2.out" });
 
     const frame = () => {
+      if (!visible || document.hidden) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
       const now = performance.now();
       // em "quadros de 60fps", para a velocidade não depender do monitor
       const dt = Math.min(4, (now - last) / 16.667);
@@ -205,11 +244,31 @@ export default function SphereImageGrid({
         const px = x1 * radius * proj;
         const py = y2 * radius * proj;
 
-        el.style.transform = `translate3d(${px}px, ${py}px, 0) scale(${scale})`;
-        el.style.zIndex = String(1000 + Math.round(depth));
-        el.style.opacity = String(
+        const seen = written[i];
+
+        // arredondado: o meio-pixel só faz a bolha tremer, e a string longa
+        // ainda impediria a comparação abaixo de bater
+        const t = `translate3d(${px.toFixed(1)}px, ${py.toFixed(
+          1
+        )}px, 0) scale(${scale.toFixed(3)})`;
+        if (t !== seen.t) {
+          el.style.transform = t;
+          seen.t = t;
+        }
+
+        const z = String(1000 + Math.round(depth));
+        if (z !== seen.z) {
+          el.style.zIndex = z;
+          seen.z = z;
+        }
+
+        const o = (
           (dimmed ? byDepth * 0.45 : isHovered ? 1 : byDepth) * fade
-        );
+        ).toFixed(3);
+        if (o !== seen.o) {
+          el.style.opacity = o;
+          seen.o = o;
+        }
 
         // o rótulo é um elemento só, que segue a bolha apontada. Se fosse um
         // por bolha, herdaria o `scale()` dela e o texto sairia deformado.
@@ -232,6 +291,7 @@ export default function SphereImageGrid({
 
     return () => {
       cancelAnimationFrame(raf);
+      io?.disconnect();
       tween.kill();
     };
   }, [
@@ -251,6 +311,15 @@ export default function SphereImageGrid({
     dragDelta.current = 0;
     pointer.current = { x: e.clientX, y: e.clientY };
     velocity.current = { x: 0, y: 0 };
+
+    // Anota a bolha ANTES de capturar o ponteiro: a captura redireciona os
+    // eventos para o contêiner e, no caminho, dispara `pointerleave` nesta
+    // bolha. Depois disso não há mais como saber onde o toque começou.
+    const tile = (e.target as Element | null)?.closest?.("[data-tile]");
+    pressed.current = tile
+      ? Number.parseInt(tile.getAttribute("data-tile")!, 10)
+      : null;
+
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -281,10 +350,14 @@ export default function SphereImageGrid({
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     // Se o deslocamento total foi pequeno, é um clique real — abre a galeria.
-    // O onClick nos botões filhos não dispara de forma confiável porque o pai
-    // capturou o pointer (setPointerCapture). Por isso resolvemos aqui.
-    if (dragDelta.current < 6 && hovered.current !== null) {
-      const image = images[hovered.current];
+    // O onClick nos botões filhos não dispara porque o pai capturou o ponteiro
+    // (setPointerCapture), então resolvemos aqui, pela bolha anotada no
+    // pointerdown.
+    const index = pressed.current;
+    pressed.current = null;
+
+    if (dragDelta.current < TAP_SLOP && index !== null) {
+      const image = images[index];
       if (image) onSelectImage?.(image);
     }
   };
@@ -317,6 +390,7 @@ export default function SphereImageGrid({
             key={image.id}
             type="button"
             tabIndex={-1}
+            data-tile={i}
             ref={(el) => {
               tilesRef.current[i] = el;
             }}

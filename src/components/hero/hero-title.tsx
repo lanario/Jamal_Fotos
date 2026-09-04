@@ -26,13 +26,30 @@ export default function HeroTitle() {
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-      tl.from("[data-anim='letter']", {
+      const letters = gsap.utils.toArray<HTMLElement>("[data-anim='letter']");
+
+      // o `will-change` entra só durante a entrada e sai no fim: mantê-lo
+      // ligado prenderia três camadas de GPU do tamanho da tela pelo resto
+      // da sessão, e é a galeria que precisa desse orçamento
+      letters.forEach((el) => {
+        el.style.willChange = "transform, filter, opacity";
+      });
+
+      tl.from(letters, {
         opacity: 0,
         yPercent: 55,
         scale: 0.9,
-        filter: "blur(16px)",
+        filter: "blur(12px)",
         duration: 0.9,
         stagger: 0.1,
+        onComplete: () => {
+          letters.forEach((el) => {
+            el.style.willChange = "";
+            // o GSAP deixa `filter: blur(0px)` no inline; sem limpar, a letra
+            // continua sendo rasterizada como camada filtrada
+            el.style.filter = "";
+          });
+        },
       })
         .from(
           "[data-anim='script']",
@@ -101,7 +118,6 @@ export default function HeroTitle() {
               style={{
                 backgroundSize: "300% 100%",
                 backgroundPosition: `${(i / (LETTERS.length - 1)) * 100}% 0`,
-                willChange: "transform, filter, opacity",
               }}
             >
               {letter}

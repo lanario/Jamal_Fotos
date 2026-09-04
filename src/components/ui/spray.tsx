@@ -28,6 +28,56 @@ const r3 = (n: number) => Number(n.toFixed(3));
 const NO_MOTION = "(prefers-reduced-motion: no-preference)";
 
 /**
+ * Só há cursor de verdade em ponteiro fino. No celular os handlers de
+ * `pointermove` disparariam a cada toque de rolagem sem nada para mostrar —
+ * puro custo.
+ */
+const hasCursor = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+/**
+ * Retângulo do elemento em cache. `getBoundingClientRect()` dentro de um
+ * `pointermove` força o navegador a recalcular layout no meio do quadro —
+ * com o mouse andando, é dezenas de recálculos por segundo. Aqui a medida é
+ * refeita só quando pode ter mudado (rolagem, resize) e sempre no início do
+ * quadro seguinte.
+ */
+function useCachedRect(ref: React.RefObject<HTMLElement | null>) {
+  const rect = useRef<DOMRect | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    let queued = false;
+    const refresh = () => {
+      queued = false;
+      rect.current = el.getBoundingClientRect();
+    };
+    const invalidate = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(refresh);
+    };
+
+    refresh();
+    window.addEventListener("scroll", invalidate, { passive: true });
+    window.addEventListener("resize", invalidate);
+    const ro = new ResizeObserver(invalidate);
+    ro.observe(el);
+
+    return () => {
+      window.removeEventListener("scroll", invalidate);
+      window.removeEventListener("resize", invalidate);
+      ro.disconnect();
+    };
+  }, [ref]);
+
+  return rect;
+}
+
+/**
  * Parallax vertical ligado à rolagem da página.
  * Mola no meio para a camada "arrastar" um pouco em vez de grudar no scroll.
  */
@@ -69,6 +119,7 @@ export function Splatter({
   const driftRefs = useRef<(SVGGElement | null)[]>([]);
   const cursorRefs = useRef<(SVGGElement | null)[]>([]);
   const y = useScrollParallax(-46 * depth);
+  const rect = useCachedRect(hostRef);
 
   // três planos de profundidade: as gotas graúdas ficam na frente
   const layers = useMemo(() => {
@@ -132,7 +183,7 @@ export function Splatter({
       // 2. o cursor empurra os planos — o da frente reage mais
       let move: ((e: PointerEvent) => void) | null = null;
 
-      if (interactive) {
+      if (interactive && hasCursor()) {
         const setters = cursorRefs.current.map((g, i) =>
           g
             ? {
@@ -144,8 +195,8 @@ export function Splatter({
         );
 
         move = (e: PointerEvent) => {
-          const box = host.getBoundingClientRect();
-          if (!box.width || !box.height) return;
+          const box = rect.current;
+          if (!box || !box.width || !box.height) return;
           const nx = clamp(
             (e.clientX - (box.left + box.width / 2)) / (box.width / 2),
             -1.6,
@@ -172,7 +223,7 @@ export function Splatter({
     });
 
     return () => mm.revert();
-  }, [interactive]);
+  }, [interactive, rect]);
 
   return (
     <div
@@ -284,6 +335,7 @@ export function Drips({
   const beadRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const dropRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const y = useScrollParallax(-26 * depth);
+  const rect = useCachedRect(hostRef);
 
   const drips = useMemo(
     () =>
@@ -318,9 +370,15 @@ export function Drips({
 
       /** Esticão momentâneo dado pela velocidade da rolagem. */
       const scroll = { boost: 0 };
+      /** Enquanto os filetes estão fora da tela, o laço não escreve nada. */
+      let visible = true;
+      /** Último valor escrito por elemento — evita repetir o mesmo estilo. */
+      const last = states.map(() => ({ t: "", b: "", d: "", a: "" }));
 
       // um único rAF escreve todos os transforms: nada de layout por quadro
       const render = (_t: number, deltaTime: number) => {
+        if (!visible || document.hidden) return;
+
         // decaimento por tempo, não por quadro — a 120 Hz cairia em metade
         // do tempo se fosse um fator fixo por tick
         scroll.boost *= Math.pow(0.93, deltaTime / 16.667);
@@ -332,28 +390,50 @@ export function Drips({
           const trail = trailRefs.current[i];
           const bead = beadRefs.current[i];
           const drop = dropRefs.current[i];
+          const seen = last[i];
 
           if (trail) {
             // afina conforme estica: a tinta se esgota no caminho
-            trail.style.transform = `scaleY(${r3(len / maxLength)}) scaleX(${r3(
+            const t = `scaleY(${r3(len / maxLength)}) scaleX(${r3(
               1 - 0.32 * s.p
             )})`;
+            if (t !== seen.t) {
+              trail.style.transform = t;
+              seen.t = t;
+            }
           }
           if (bead) {
-            bead.style.transform = `translate3d(-50%, ${r3(
-              len
-            )}px, 0) scale(${r3(s.bead)})`;
+            const t = `translate3d(-50%, ${r3(len)}px, 0) scale(${r3(s.bead)})`;
+            if (t !== seen.b) {
+              bead.style.transform = t;
+              seen.b = t;
+            }
           }
           if (drop) {
-            drop.style.transform = `translate3d(-50%, ${r3(
-              len + s.dropY
-            )}px, 0)`;
-            drop.style.opacity = `${r3(s.dropA)}`;
+            const t = `translate3d(-50%, ${r3(len + s.dropY)}px, 0)`;
+            if (t !== seen.d) {
+              drop.style.transform = t;
+              seen.d = t;
+            }
+            const a = `${r3(s.dropA)}`;
+            if (a !== seen.a) {
+              drop.style.opacity = a;
+              seen.a = a;
+            }
           }
         }
       };
 
       gsap.ticker.add(render);
+
+      // fora da tela nem o laço nem as timelines precisam correr
+      const io = new IntersectionObserver(
+        ([entry]) => {
+          visible = entry.isIntersecting;
+        },
+        { rootMargin: "15% 0px" }
+      );
+      io.observe(host);
 
       // ciclo de vida de cada escorrido
       const timelines = states.map((s, i) => {
@@ -424,12 +504,12 @@ export function Drips({
       // o cursor apressa quem passa por perto
       let move: ((e: PointerEvent) => void) | null = null;
 
-      if (interactive) {
+      if (interactive && hasCursor()) {
         const nudged = states.map(() => false);
 
         move = (e: PointerEvent) => {
-          const box = host.getBoundingClientRect();
-          if (!box.width) return;
+          const box = rect.current;
+          if (!box || !box.width) return;
           const x = e.clientX - box.left;
           // vale também um pouco acima e bem abaixo: o filete é comprido
           const near =
@@ -453,6 +533,7 @@ export function Drips({
 
       return () => {
         gsap.ticker.remove(render);
+        io.disconnect();
         timelines.forEach((tl) => tl.kill());
         st.kill();
         if (move) window.removeEventListener("pointermove", move);
@@ -460,7 +541,7 @@ export function Drips({
     });
 
     return () => mm.revert();
-  }, [drips, interactive, maxLength, speed]);
+  }, [drips, interactive, maxLength, speed, rect]);
 
   return (
     <div

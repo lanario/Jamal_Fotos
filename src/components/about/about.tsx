@@ -120,7 +120,10 @@ export default function About() {
     <section
       ref={sectionRef}
       id="sobre"
-      className="texture-noise relative overflow-hidden bg-ink-900 py-20 sm:py-28 lg:py-36"
+      // `-flat`: o grão cobre respingos que fazem parallax no scroll, e a
+      // versão com `mix-blend-mode` faria o navegador remisturar a seção
+      // inteira a cada quadro de rolagem
+      className="texture-noise-flat relative overflow-hidden bg-ink-900 py-20 sm:py-28 lg:py-36"
     >
       <Splatter
         seed={17}
@@ -171,7 +174,9 @@ export default function About() {
               {/* trama de meio-tom + rebaixamento na base, para o nome respirar */}
               <div
                 aria-hidden
-                className="texture-halftone pointer-events-none absolute inset-0 opacity-[0.09] mix-blend-screen"
+                // sem `mix-blend-screen`: a foto atrás faz parallax, então a
+                // mistura seria refeita a cada quadro
+                className="texture-halftone pointer-events-none absolute inset-0 opacity-[0.07]"
               />
               <div
                 aria-hidden

@@ -108,6 +108,21 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
+  /*
+     Mesma textura, sem `mix-blend-mode`. Usada onde o grão fica por cima de
+     algo que se move (o túnel do hero): misturar camadas obriga o navegador
+     a reler o que está atrás a cada quadro — é caro e faz a cena piscar.
+     A opacidade sozinha entrega quase o mesmo grão a custo de compositor.
+  */
+  .texture-noise-flat::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
   /* Meio-tom (halftone) — a trama de pontos das artes de referência */
   .texture-halftone {
     background-image: radial-gradient(
@@ -147,6 +162,18 @@
   transform-origin: center;
   animation: spray-dot-pulse var(--dot-dur, 6s) ease-in-out var(--dot-delay, 0s)
     infinite;
+}
+
+/*
+  No celular o pulso sai de cena: animar dezenas de círculos dentro de um SVG
+  repinta a nuvem inteira a cada quadro, e é justamente onde há menos GPU
+  sobrando. As gotas continuam lá, paradas — ninguém sente falta do pulso, mas
+  todo mundo sente o scroll travando por causa dele.
+*/
+@media (max-width: 640px) {
+  .spray-dot {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------------

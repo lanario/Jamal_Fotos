@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -62,7 +61,10 @@ export default function Hero() {
           opacity: 0,
           yPercent: -8,
           scale: 0.94,
-          filter: "blur(14px)",
+          // sem `filter: blur()` aqui: desfocar um lockup do tamanho da tela
+          // obriga o navegador a rasterizar tudo de novo a cada quadro de
+          // rolagem — era um dos travamentos. Opacidade + escala fazem a
+          // mesma leitura e rodam só no compositor.
           ease: "none",
           duration: 0.6,
         });
@@ -95,7 +97,12 @@ export default function Hero() {
       className="relative h-[210svh]"
       aria-label="Abertura — JML Sports"
     >
-      <div className="texture-noise sticky top-0 h-dvh w-full overflow-hidden bg-ink-900">
+      {/*
+        `texture-noise-flat`, e não `texture-noise`: a variante com
+        `mix-blend-mode` obrigaria o navegador a reler o túnel inteiro para
+        misturar o grão a cada quadro. Aqui o grão entra por opacidade.
+      */}
+      <div className="texture-noise-flat sticky top-0 h-dvh w-full overflow-hidden bg-ink-900">
         {/* túnel de fotos */}
         <InfiniteGallery
           ref={galleryRef}
@@ -140,7 +147,10 @@ export default function Hero() {
           speed={0.65}
           depth={0.25}
           interactive={false}
-          className="inset-x-0 top-0 h-[38vh] opacity-45 blur-[1.5px]"
+          // sem `blur-[1.5px]`: o filtro cai sobre uma camada que se move a
+          // cada quadro, e desfocar exige rasterizar tudo de novo. A opacidade
+          // mais baixa entrega a mesma sensação de profundidade.
+          className="inset-x-0 top-0 h-[38vh] opacity-30"
         />
         <Drips
           seed={2}

@@ -103,6 +103,27 @@ do hero** pelo mapa `PORTRAITS` em `scripts/optimize-images.mjs`; ele vira
 > O círculo com seta é grafismo (`aria-hidden`), pronto para virar o CTA do
 > portfólio quando aquela seção existir.
 
+## Eventos (home, abaixo do Sobre)
+
+Uma tira por campeonato — `src/components/portfolio/events-preview.tsx` monta
+as tiras a partir de `championships` (a capa é a primeira foto do conjunto) e
+`src/components/ui/image-gallery.tsx` faz o leque.
+
+Cada tira leva para `/portfolio?evento=<slug>`, que abre aquela galeria já na
+chegada; abaixo delas, o CTA `.btn-animated` vai para `/portfolio` inteiro.
+
+O leque é o mesmo nas duas pontas, mas quem abre a tira muda: no desktop é o
+`:hover`; no toque, que não tem hover, a tira aberta é estado — a primeira já
+entra aberta, tocar numa fechada abre ela e só o toque na aberta é que navega.
+Uma `matchMedia` tira esse estado da frente acima de `lg`, senão a tira aberta
+no celular ficaria presa aberta ao voltar para o desktop.
+
+O deep link é lido de `location.search` num efeito de montagem, e **não** com o
+`useSearchParams` do Next: numa página estática aquele hook exige um limite de
+Suspense e faz a subárvore renderizar de novo no cliente — a esfera montava
+duas vezes, só uma das montagens via o parâmetro, e o link abria a galeria uma
+vez sim, outra não. Sem ele, `/portfolio` também volta a ser pré-renderizada.
+
 ## Próximas seções
 
-Portfólio por evento · Agenda de campeonatos · Serviços · Depoimentos · Contato.
+Agenda de campeonatos · Serviços · Depoimentos · Contato.

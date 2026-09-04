@@ -91,6 +91,12 @@ export default function SphereImageGrid({
    * pressionada, zerando `hovered` antes mesmo do `pointerup` chegar.
    */
   const pressed = useRef<number | null>(null);
+  /**
+   * Id do ponteiro que este palco capturou, ou `null`. Enquanto a captura
+   * existe, TODO evento de ponteiro da página é redirecionado para cá — se ela
+   * vazar, o site inteiro para de responder ao mouse e ao toque.
+   */
+  const captured = useRef<number | null>(null);
   const activeRef = useRef<string | null>(activeGroup);
   /** 0 → 1 durante a entrada; multiplica a opacidade das peças. */
   const intro = useRef({ v: 0 });
@@ -306,6 +312,30 @@ export default function SphereImageGrid({
     autoRotateSpeed,
   ]);
 
+  /** Solta a captura sem nunca lançar, e anota que ela não existe mais. */
+  const releaseCapture = (el: Element, pointerId: number) => {
+    captured.current = null;
+    try {
+      if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+    } catch {
+      // já solta: não há nada a desfazer
+    }
+  };
+
+  /*
+   * Última garantia: se este palco sumir da árvore ainda segurando o ponteiro
+   * (trocar de rota com o dedo na tela), a captura sobreviveria ao elemento e
+   * a página ficaria surda a mouse e toque.
+   */
+  useEffect(() => {
+    const stage = stageRef.current?.parentElement;
+    return () => {
+      const id = captured.current;
+      if (stage && id !== null) releaseCapture(stage, id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startDrag = (e: React.PointerEvent) => {
     dragging.current = true;
     dragDelta.current = 0;
@@ -320,7 +350,19 @@ export default function SphereImageGrid({
       ? Number.parseInt(tile.getAttribute("data-tile")!, 10)
       : null;
 
-    e.currentTarget.setPointerCapture(e.pointerId);
+    /*
+     * Capturar pode falhar se o ponteiro já sumiu entre o evento e esta linha
+     * (toque cancelado, aba trocada). Se falhar, não podemos ficar com
+     * `dragging` ligado: a esfera pararia de girar sozinha para sempre,
+     * esperando um `pointerup` que nunca vem.
+     */
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      captured.current = e.pointerId;
+    } catch {
+      captured.current = null;
+      dragging.current = false;
+    }
   };
 
   const moveDrag = (e: React.PointerEvent) => {
@@ -347,7 +389,14 @@ export default function SphereImageGrid({
   const endDrag = (e: React.PointerEvent) => {
     if (!dragging.current) return;
     dragging.current = false;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+
+    /*
+     * `releasePointerCapture` lança se a captura já foi solta pelo navegador —
+     * o que acontece justamente num `pointercancel` (o gesto virou rolagem, a
+     * aba perdeu o foco). Sem o try, a exceção estoura aqui e o `onSelectImage`
+     * abaixo nunca roda: o toque não abre a galeria e parece que o site travou.
+     */
+    releaseCapture(e.currentTarget, e.pointerId);
 
     // Se o deslocamento total foi pequeno, é um clique real — abre a galeria.
     // O onClick nos botões filhos não dispara porque o pai capturou o ponteiro

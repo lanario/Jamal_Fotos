@@ -266,10 +266,23 @@ type MobileMenuProps = {
 function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  /*
+   * A pintura (respingos e escorridos) custa caro para montar: são centenas
+   * de <circle> e uma dúzia de timelines do GSAP. Montada junto com o painel,
+   * ela roubava justamente os primeiros quadros da abertura — daí a sensação
+   * de travamento. Agora ela só entra depois que o painel terminou de subir.
+   */
+  const [decor, setDecor] = useState(false);
+
+  // fechou: a pintura volta a esperar a próxima subida terminar
+  useEffect(() => {
+    if (!open) setDecor(false);
+  }, [open]);
+
   // os respingos e escorridos entram por GSAP, fora do ciclo do framer
   useEffect(() => {
     const panel = panelRef.current;
-    if (!open || !panel || reduceMotion()) return;
+    if (!decor || !panel || reduceMotion()) return;
 
     const ctx = gsap.context(() => {
       gsap.from("[data-menu='drips']", {
@@ -288,7 +301,7 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
     }, panel);
 
     return () => ctx.revert();
-  }, [open]);
+  }, [decor]);
 
   return (
     <AnimatePresence>
@@ -299,34 +312,46 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
           role="dialog"
           aria-modal="true"
           aria-label="Menu"
-          initial={{ clipPath: "inset(0% 0% 100% 0%)" }}
-          animate={{ clipPath: "inset(0% 0% 0% 0%)" }}
-          exit={{ clipPath: "inset(0% 0% 100% 0%)" }}
-          transition={{ duration: 0.55, ease: EASE_BRAND }}
+          /*
+           * Sobe por `transform`, não por `clip-path`: o clip animado obriga
+           * o navegador a repintar a tela inteira a cada quadro, e o painel
+           * ocupa a tela inteira. Um translate é puro compositor.
+           */
+          initial={{ y: "100%" }}
+          animate={{ y: "0%" }}
+          exit={{ y: "100%" }}
+          transition={{ duration: 0.38, ease: EASE_BRAND }}
+          onAnimationComplete={() => open && setDecor(true)}
           /* overflow-x travado: os respingos saem da caixa e, sem isso,
-             `overflow-y-auto` deixaria o painel rolar de lado */
-          className="texture-noise fixed inset-0 z-40 flex flex-col overflow-x-hidden overflow-y-auto bg-ink-900 md:hidden"
+             `overflow-y-auto` deixaria o painel rolar de lado.
+             `texture-noise-flat` no lugar de `texture-noise`: o grão em
+             `mix-blend-mode` mandaria reler o fundo a cada quadro da subida */
+          className="texture-noise-flat fixed inset-0 z-40 flex flex-col overflow-x-hidden overflow-y-auto bg-ink-900 will-change-transform md:hidden"
         >
-          <div
-            data-menu="drips"
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-[16vh]"
-          >
-            <Drips seed={13} count={11} maxLength={120} className="inset-0" />
-          </div>
+          {decor && (
+            <>
+              <div
+                data-menu="drips"
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-[16vh]"
+              >
+                <Drips seed={13} count={7} maxLength={120} className="inset-0" />
+              </div>
 
-          <Splatter
-            seed={7}
-            count={150}
-            data-menu="splat"
-            className="-top-[6%] -right-[24%] h-[46vh] w-[70vw] opacity-40"
-          />
-          <Splatter
-            seed={29}
-            count={120}
-            data-menu="splat"
-            className="-bottom-[10%] -left-[26%] h-[42vh] w-[68vw] opacity-30"
-          />
+              <Splatter
+                seed={7}
+                count={90}
+                data-menu="splat"
+                className="-top-[6%] -right-[24%] h-[46vh] w-[70vw] opacity-40"
+              />
+              <Splatter
+                seed={29}
+                count={70}
+                data-menu="splat"
+                className="-bottom-[10%] -left-[26%] h-[42vh] w-[68vw] opacity-30"
+              />
+            </>
+          )}
 
           <nav
             aria-label="Navegação principal"
@@ -338,9 +363,11 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
                   <motion.div
                     initial={{ y: "110%", skewY: 5 }}
                     animate={{ y: "0%", skewY: 0 }}
+                    /* o último item fechava só depois de 1s; agora a lista
+                       inteira assenta em ~0,55s, junto com o fim da subida */
                     transition={{
-                      duration: 0.6,
-                      delay: 0.18 + i * 0.08,
+                      duration: 0.34,
+                      delay: 0.1 + i * 0.05,
                       ease: EASE_BRAND,
                     }}
                   >
@@ -372,7 +399,7 @@ function MobileMenu({ open, active, onNavigate, onClose }: MobileMenuProps) {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5, ease: EASE_BRAND }}
+            transition={{ duration: 0.3, delay: 0.28, ease: EASE_BRAND }}
             className="relative border-t border-ink-600 px-6 py-6"
           >
             <p className="font-num mb-4 text-[11px] font-semibold tracking-[0.3em] text-ash-600 uppercase">

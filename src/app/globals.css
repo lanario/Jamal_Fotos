@@ -341,9 +341,16 @@
 /* ------------------------------------------------------------------
    Chave do menu mobile (base: Uiverse.io / adamgiebl).
    Adaptado: barras no rosa da marca e caixa de 48px em vez de 60px —
-   60px com barras de 6px pesa demais ao lado do wordmark. As durações
-   e a mecânica (barra do meio some, extremas viram X, tudo gira 180°)
-   são as do original.
+   60px com barras de 6px pesa demais ao lado do wordmark. A mecânica é
+   a do original: a barra do meio some, as extremas viram X, tudo gira 180°.
+
+   Reescrito para o compositor. Antes, `transition-duration` solto fazia
+   transicionar *todas* as propriedades — inclusive `width` e a troca de
+   `position` para `absolute` no estado aberto —, então cada quadro do giro
+   pedia layout novo dentro do <header> fixo, e a chave engasgava justo
+   quando o painel do menu estava montando. Agora as barras já nascem em
+   `absolute` (a posição de cada uma vive no `transform`) e só `transform` e
+   `opacity` mudam: nada de layout, nada de repintura.
    ------------------------------------------------------------------ */
 .nav-toggle-input {
   display: none;
@@ -351,59 +358,61 @@
 
 .nav-toggle {
   position: relative;
+  display: block;
   width: 48px;
   height: 48px;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition-duration: 0.5s;
+  transform: rotate(0deg);
+  transition: transform 0.32s var(--ease-brand);
+  /* o realce do toque atrasa o retorno visual no celular */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .nav-toggle .bar {
+  position: absolute;
+  top: 50%;
+  left: 0;
   width: 100%;
   height: 5px;
-  background-color: var(--color-pink-500);
+  margin-top: -2.5px;
   border-radius: 6px;
+  background-color: var(--color-pink-500);
   box-shadow: 0 0 12px rgb(240 25 125 / 0.45);
+  transition:
+    transform 0.32s var(--ease-brand),
+    opacity 0.16s linear;
+}
+
+/* fechado: as três empilhadas — 5px de barra, 10px de folga */
+.nav-toggle .bar-top {
+  transform: translateY(-15px) scaleX(0.8);
 }
 
 .nav-toggle .bar-mid {
-  transition-duration: 0.8s;
+  transform: translateY(0) scaleX(1);
 }
 
-.nav-toggle .bar-top,
 .nav-toggle .bar-bottom {
-  width: 80%;
+  transform: translateY(15px) scaleX(0.8);
 }
 
-.nav-toggle-input:checked + .nav-toggle .bar {
-  position: absolute;
-  transition-duration: 0.5s;
-}
-
-.nav-toggle-input:checked + .nav-toggle .bar-mid {
-  transform: scaleX(0);
-  transition-duration: 0.5s;
+/* aberto: o X, com o conjunto dando meia volta */
+.nav-toggle-input:checked + .nav-toggle {
+  transform: rotate(180deg);
 }
 
 .nav-toggle-input:checked + .nav-toggle .bar-top {
-  width: 100%;
-  transform: rotate(45deg);
-  transition-duration: 0.5s;
+  transform: translateY(0) rotate(45deg);
+}
+
+.nav-toggle-input:checked + .nav-toggle .bar-mid {
+  opacity: 0;
+  transform: translateY(0) scaleX(0);
 }
 
 .nav-toggle-input:checked + .nav-toggle .bar-bottom {
-  width: 100%;
-  transform: rotate(-45deg);
-  transition-duration: 0.5s;
-}
-
-.nav-toggle-input:checked + .nav-toggle {
-  transition-duration: 0.5s;
-  transform: rotate(180deg);
+  transform: translateY(0) rotate(-45deg);
 }
 
 /* o input está escondido, então o foco tem que aparecer na chave */

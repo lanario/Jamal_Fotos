@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
 import EventGalleryModal from "@/components/portfolio/event-gallery-modal";
@@ -19,6 +20,27 @@ export default function ChampionshipSphere() {
   const [selected, setSelected] = useState<string>(championships[0].slug);
   const [preview, setPreview] = useState<string | null>(null);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
+
+  /*
+   * `?evento=<slug>` — as tiras da home apontam para um campeonato específico,
+   * então chegar aqui já com aquela galeria aberta é o que o clique prometeu.
+   *
+   * Lido de `location.search` num efeito de montagem, e não com o
+   * `useSearchParams` do Next: numa página estática aquele hook precisa de um
+   * limite de Suspense e faz a subárvore renderizar de novo no cliente — na
+   * prática a esfera montava duas vezes e só uma das montagens enxergava o
+   * parâmetro, então o link abria a galeria uma vez sim, outra não.
+   *
+   * Só na montagem, de propósito: fechar a galeria não pode reabri-la, e não
+   * existe link que troque a query sem sair desta página.
+   */
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("evento");
+    if (!slug || !championships.some((c) => c.slug === slug)) return;
+
+    setSelected(slug);
+    setOpenSlug(slug);
+  }, []);
 
   const focused = preview ?? selected;
 

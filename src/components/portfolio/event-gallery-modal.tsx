@@ -1,6 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import ImgStack from "@/components/ui/image-stack";
@@ -8,6 +9,9 @@ import { Splatter } from "@/components/ui/spray";
 import type { Championship } from "@/data/championships";
 
 const EASE_BRAND = [0.2, 0.7, 0.3, 1];
+
+/** Folga sobre a saída (0,35 s) antes de considerar a animação travada. */
+const EXIT_WATCHDOG_MS = 900;
 
 type EventGalleryModalProps = {
   championship: Championship | null;
@@ -18,6 +22,20 @@ type EventGalleryModalProps = {
  * Galeria do evento. Radix cuida do que é chato e fácil de errar à mão —
  * prender o foco, fechar no Escape, travar a rolagem de fundo e marcar o
  * resto da página como inerte.
+ *
+ * Enquanto o modal está montado, o Radix põe `aria-hidden` no `<main>` e no
+ * `<header>` e `pointer-events: none` no `<body>`; ele desfaz tudo isso na
+ * limpeza dos efeitos, ou seja, **só quando o modal desmonta de verdade**. E
+ * quem manda na desmontagem aqui é o `AnimatePresence`: ele segura o filho
+ * até a animação de saída terminar.
+ *
+ * Daí o travamento: animação de saída é movida a `requestAnimationFrame`, que
+ * o navegador congela quando a aba vai para segundo plano (trocar de aba, sair
+ * do navegador no celular, bloquear a tela). Fechar a galeria e sair na mesma
+ * hora deixa a saída pela metade — o filho nunca é removido, a limpeza nunca
+ * roda, e ao voltar a página inteira segue coberta e inerte. Só o F5 resolve.
+ *
+ * As três defesas abaixo cortam isso pela raiz.
  */
 export default function EventGalleryModal({
   championship,
@@ -25,11 +43,82 @@ export default function EventGalleryModal({
 }: EventGalleryModalProps) {
   const open = Boolean(championship);
 
+  /*
+   * 1. Escotilha de emergência. Trocar esta chave descarta a subárvore presa
+   *    no `AnimatePresence`; como é uma desmontagem de verdade, as limpezas do
+   *    Radix rodam e a página volta a responder.
+   */
+  const [generation, setGeneration] = useState(0);
+
+  useEffect(() => {
+    if (open) return;
+
+    const timer = window.setTimeout(() => {
+      // ainda montado bem depois do fim previsto: a saída não completou
+      if (document.querySelector("[data-event-gallery]")) {
+        setGeneration((n) => n + 1);
+      }
+    }, EXIT_WATCHDOG_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  /*
+   * 2. Rede de segurança final. Se por qualquer caminho o Radix não restaurar
+   *    o `<body>`, a página fica sem receber clique nenhum. Aqui, com o modal
+   *    fechado, isso nunca é um estado legítimo.
+   */
+  useEffect(() => {
+    if (open) return;
+
+    const restore = () => {
+      if (document.querySelector("[data-event-gallery]")) return;
+      if (document.body.style.pointerEvents === "none") {
+        document.body.style.pointerEvents = "";
+      }
+    };
+
+    const timer = window.setTimeout(restore, EXIT_WATCHDOG_MS + 100);
+    return () => window.clearTimeout(timer);
+  }, [open, generation]);
+
+  /*
+   * 3. A aba voltando ao primeiro plano é o momento exato em que o usuário
+   *    reencontraria a tela travada — então é aí que reconferimos.
+   */
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  useEffect(() => {
+    const check = () => {
+      if (document.hidden || openRef.current) return;
+      if (document.querySelector("[data-event-gallery]")) {
+        setGeneration((n) => n + 1);
+      } else if (document.body.style.pointerEvents === "none") {
+        document.body.style.pointerEvents = "";
+      }
+    };
+
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("pageshow", check);
+
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("pageshow", check);
+    };
+  }, []);
+
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
-      <AnimatePresence>
+      <AnimatePresence key={generation}>
         {championship && (
-          <Dialog.Portal forceMount>
+          /*
+            `key` fixa: sem ela, reabrir uma galeria antes de a saída terminar
+            faz o AnimatePresence tratar a nova como um elemento diferente e
+            manter as duas — a que estava saindo fica pendurada para sempre.
+            Com a chave estável, reabrir simplesmente cancela a saída.
+          */
+          <Dialog.Portal forceMount key="event-gallery">
             <Dialog.Overlay asChild forceMount>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -42,6 +131,7 @@ export default function EventGalleryModal({
 
             <Dialog.Content asChild forceMount>
               <motion.div
+                data-event-gallery
                 initial={{ opacity: 0, y: 28, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.98 }}

@@ -1,4 +1,4 @@
-import { championships } from "@/data/championships";
+import { eventPhotoCounts } from "@/data/event-counts";
 import { federationLogos } from "@/data/logos";
 import type { GalleryImage } from "@/lib/types";
 
@@ -22,7 +22,7 @@ export const federations: Federation[] = [
   {
     name: "CBJJD",
     logo: federationLogos.CBJJD,
-    eventSlugs: ["cbjjd", "valdes-cbjjd-saquarema"],
+    eventSlugs: ["cbjjd"],
   },
   {
     name: "CBJJO",
@@ -42,16 +42,20 @@ export const federations: Federation[] = [
   {
     name: "LJJB",
     logo: federationLogos.LJJB,
-    eventSlugs: ["ljjb-angra", "ljjb-sulamericano"],
+    eventSlugs: ["ljjb"],
   },
 ];
 
-const bySlug = new Map(championships.map((c) => [c.slug, c]));
-
-/** Fotos somadas dos eventos da federação. */
+/**
+ * Fotos somadas dos eventos da federação.
+ *
+ * Lê do mapa de contagens, não do manifesto cheio: a home só mostra o número,
+ * e importar `events.ts` aqui traria os blur placeholders de todas as fotos do
+ * acervo para o primeiro carregamento da página inicial.
+ */
 export const federationPhotoCount = (federation: Federation) =>
   federation.eventSlugs.reduce(
-    (total, slug) => total + (bySlug.get(slug)?.photos.length ?? 0),
+    (total, slug) => total + (eventPhotoCounts[slug] ?? 0),
     0
   );
 

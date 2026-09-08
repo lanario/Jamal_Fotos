@@ -108,6 +108,24 @@ export default function EventGalleryModal({
     };
   }, []);
 
+  /*
+   * Fechar clicando no vazio.
+   *
+   * O `onPointerDownOutside` do Radix não serve aqui: o painel é `inset-0`, ou
+   * seja, ocupa a tela inteira e não existe "fora" para ele detectar. Então o
+   * fora é definido por dentro — tudo que não estiver marcado com
+   * `data-gallery-keep` (a pilha com seus controles e o bloco do título) é
+   * fundo, e clique em fundo fecha.
+   *
+   * O `pointerdown` é conferido junto com o clique porque a carta de cima é
+   * arrastável: soltar o arrasto longe da pilha faz o clique subir até o
+   * painel, e sem essa checagem terminar um arrasto fecharia a galeria.
+   */
+  const pressedOutside = useRef(false);
+
+  const isBackdrop = (target: EventTarget | null) =>
+    !(target instanceof Element) || !target.closest("[data-gallery-keep]");
+
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <AnimatePresence key={generation}>
@@ -132,6 +150,12 @@ export default function EventGalleryModal({
             <Dialog.Content asChild forceMount>
               <motion.div
                 data-event-gallery
+                onPointerDown={(e) => {
+                  pressedOutside.current = isBackdrop(e.target);
+                }}
+                onClick={(e) => {
+                  if (pressedOutside.current && isBackdrop(e.target)) onClose();
+                }}
                 initial={{ opacity: 0, y: 28, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -150,8 +174,13 @@ export default function EventGalleryModal({
                 />
 
                 <div className="relative mx-auto flex min-h-full w-full max-w-5xl flex-col px-5 py-6 sm:px-8 sm:py-10">
+                  {/*
+                    A faixa do cabeçalho é larga e quase toda vazia, então a
+                    marcação fica nos dois blocos que têm conteúdo — o do
+                    título e o botão de fechar —, não na linha inteira.
+                  */}
                   <div className="flex items-start justify-between gap-6">
-                    <div>
+                    <div data-gallery-keep>
                       <p className="font-num flex items-center gap-3 text-[11px] font-semibold tracking-[0.3em] text-ash-400 uppercase">
                         <span
                           className="inline-block h-px w-6 bg-pink-500"
@@ -171,6 +200,7 @@ export default function EventGalleryModal({
                     </div>
 
                     <Dialog.Close
+                      data-gallery-keep
                       aria-label="Fechar galeria"
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-ink-600 bg-ink-800 text-ash-400 transition-colors duration-200 hover:border-pink-500 hover:text-pink-400"
                     >
@@ -192,17 +222,26 @@ export default function EventGalleryModal({
 
                   <div className="flex flex-1 items-center justify-center py-10 sm:py-14">
                     {/*
-                      `key` pelo slug: o ImgStack guarda a ordem das cartas em
-                      estado inicializado só na montagem. Trocar de evento com
-                      o modal aberto reaproveitaria a ordem do evento anterior
-                      — inofensivo enquanto todos têm 3 fotos, mas um índice
-                      fora do intervalo assim que os conjuntos reais chegarem.
+                      A moldura existe para delimitar a pilha: ela encolhe até
+                      o conteúdo, então o vazio à volta continua sendo fundo
+                      que fecha. As cartas de trás vazam para fora dessa caixa,
+                      mas `closest` anda pela árvore, não pela geometria — o
+                      clique numa delas continua sendo clique na pilha.
                     */}
-                    <ImgStack
-                      key={championship.slug}
-                      images={championship.photos}
-                      eventName={championship.name}
-                    />
+                    <div data-gallery-keep>
+                      {/*
+                        `key` pelo slug: o ImgStack guarda a ordem das cartas
+                        em estado inicializado só na montagem. Trocar de evento
+                        com o modal aberto reaproveitaria a ordem do anterior —
+                        e com conjuntos de tamanhos diferentes (38 na CBJJD, 58
+                        na LJJB) isso é índice fora do intervalo.
+                      */}
+                      <ImgStack
+                        key={championship.slug}
+                        images={championship.photos}
+                        eventName={championship.name}
+                      />
+                    </div>
                   </div>
                 </div>
               </motion.div>

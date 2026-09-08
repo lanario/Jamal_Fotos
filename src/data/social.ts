@@ -1,6 +1,11 @@
 import type { ComponentType, SVGProps } from "react";
 
-import { InstagramIcon, TikTokIcon, WhatsAppIcon } from "@/components/ui/social-icons";
+import {
+  InstagramIcon,
+  LinkIcon,
+  TikTokIcon,
+  WhatsAppIcon,
+} from "@/components/ui/social-icons";
 
 export type SocialLink = {
   id: "whatsapp" | "instagram" | "tiktok";
@@ -39,3 +44,15 @@ export const socialLinks: SocialLink[] = [
     Icon: TikTokIcon,
   },
 ];
+
+/**
+ * Página de links do Jamal (Banlek) — reúne tudo num lugar só.
+ * Fica fora de `socialLinks` porque não é uma rede: não entra na coluna de
+ * contato nem no FAB, só no atalho abaixo dos ícones de rede.
+ */
+export const linkHub = {
+  label: "Todos os links",
+  handle: "banlek.com/jamal",
+  href: "https://banlek.com/jamal",
+  Icon: LinkIcon,
+};

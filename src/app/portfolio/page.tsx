@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 
 import Footer from "@/components/footer/footer";
-import ChampionshipSphere from "@/components/portfolio/championship-sphere";
+import ChampionshipGallery from "@/components/portfolio/championship-gallery";
 import { Splatter, SprayStroke } from "@/components/ui/spray";
-import { championships } from "@/data/championships";
 
 export const metadata: Metadata = {
   title: "Portfólio — JML Sports | Jamal",
   description:
-    "Campeonatos de Jiu-Jitsu cobertos por Jamal no Rio de Janeiro: Carlson Gracie, CBJJD, Copa do Brasil BJJ, Copa Javali, FJJP-Rio e mais.",
+    "Eventos esportivos cobertos por Jamal no Rio de Janeiro: CBJJD, Copa Javali, FJJP-Rio e LJJB no Jiu-Jitsu, mais corrida de rua e futebol 7.",
 };
 
 export default function PortfolioPage() {
@@ -42,13 +41,13 @@ export default function PortfolioPage() {
           </span>
 
           <p className="mt-6 max-w-[52ch] text-[15px] leading-relaxed text-ash-400 sm:text-base">
-            Eventos de Jiu-Jitsu registrados na beira do tatame, do primeiro
-            combate da manhã à final. Gire a esfera ou escolha um evento na
-            lista.
+            Do primeiro combate da manhã à final, da largada à linha de
+            chegada: Jiu-Jitsu na beira do tatame, corrida de rua e futebol 7.
+            Escolha um evento e siga pela seta para ver a cobertura completa.
           </p>
 
           <div className="mt-14 sm:mt-20">
-            <ChampionshipSphere />
+            <ChampionshipGallery />
           </div>
         </div>
       </section>

@@ -7,3 +7,8 @@ out
 next-env.d.ts
 
 .next-*
+
+# Originais dos campeonatos (~1 GB, direto do Drive). O que o site serve sai
+# otimizado em public/eventos, que é versionado — para reconstruir a galeria
+# basta ter estas pastas de volta e rodar `npm run images`.
+public/portifolio

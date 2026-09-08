@@ -32,8 +32,11 @@ import { cn } from "@/lib/utils";
 
 export type GalleryStrip = {
   id: string;
-  /** Para onde a seta leva. */
-  href: string;
+  /**
+   * Para onde a seta leva. Ignorado quando a galeria recebe `onOpen` — aí a
+   * seta abre a galeria ali mesmo, sem sair da página.
+   */
+  href?: string;
   image: GalleryImage;
   title: string;
   /** Linha de apoio — contagem de fotos, data, local. */
@@ -50,15 +53,38 @@ type ImageGalleryProps = {
   items: GalleryStrip[];
   /** Rótulo da lista para leitores de tela. */
   label: string;
+  /**
+   * Quando informado, a seta abre a galeria na própria página em vez de
+   * navegar pelo `href` — é o que o portfólio usa, porque lá as fotos do
+   * evento abrem no modal, sem trocar de rota.
+   */
+  onOpen?: (id: string) => void;
+  /**
+   * Qual tira está aberta. Passar os dois (com `onSelect`) entrega a escolha
+   * para quem chama — é como o portfólio abre a tira certa quando a home manda
+   * um `?evento=`. Sem eles, a galeria se vira sozinha.
+   */
+  selectedId?: string;
+  onSelect?: (id: string) => void;
   className?: string;
 };
 
 export default function ImageGallery({
   items,
   label,
+  onOpen,
+  selectedId,
+  onSelect,
   className,
 }: ImageGalleryProps) {
-  const [selected, setSelected] = useState(items[0]?.id ?? null);
+  const [ownSelected, setOwnSelected] = useState(items[0]?.id ?? null);
+
+  const selected = selectedId ?? ownSelected;
+
+  const select = (id: string) => {
+    if (selectedId === undefined) setOwnSelected(id);
+    onSelect?.(id);
+  };
 
   /*
    * O hover do desktop passa por cima da escolha enquanto o ponteiro está em
@@ -90,7 +116,7 @@ export default function ImageGallery({
       className={cn(
         // sangra até a borda enquanto as tiras são estreitas
         "-mx-5 flex gap-[3px] sm:-mx-8 sm:gap-1.5 lg:mx-0 lg:gap-2",
-        className
+        className,
       )}
     >
       {items.map((item) => {
@@ -108,7 +134,7 @@ export default function ImageGallery({
               "shrink basis-0",
               "transition-[flex-grow] ease-[cubic-bezier(0.2,0.7,0.3,1)]",
               smooth ? "duration-500" : "duration-200",
-              isOpen ? "grow-[4] lg:grow-[5]" : "grow"
+              isOpen ? "grow-[4] lg:grow-[5]" : "grow",
             )}
           >
             <div
@@ -118,7 +144,7 @@ export default function ImageGallery({
                 isOpen ? "border-pink-500/70" : "border-pink-500/25",
                 // marca não sangra a tira: sem foto, o card precisa de um
                 // fundo próprio para não virar um buraco no fundo da seção
-                isMark && "bg-white/[0.035]"
+                isMark && "bg-white/[0.035]",
               )}
             >
               <Image
@@ -144,7 +170,7 @@ export default function ImageGallery({
                     ? // o padding de baixo é maior para a marca subir e sair de
                       // cima do bloco de texto, que pousa no rodapé da tira
                       "object-contain px-2 pt-10 pb-28 sm:px-5 sm:pt-14 sm:pb-32"
-                    : "object-cover"
+                    : "object-cover",
                 )}
               />
 
@@ -173,9 +199,9 @@ export default function ImageGallery({
                 aria-label={
                   item.meta ? `${item.title} — ${item.meta}` : item.title
                 }
-                onClick={() => setSelected(item.id)}
+                onClick={() => select(item.id)}
                 // o teclado abre ao chegar, sem precisar de um Enter só para isso
-                onFocus={() => setSelected(item.id)}
+                onFocus={() => select(item.id)}
                 className="absolute inset-0 cursor-pointer"
               />
 
@@ -189,7 +215,7 @@ export default function ImageGallery({
                   "font-display pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 text-[11px] tracking-[0.14em] whitespace-nowrap text-white uppercase sm:text-[13px] lg:bottom-5 lg:text-[15px]",
                   "[writing-mode:vertical-rl] [text-orientation:mixed] rotate-180",
                   "transition-opacity duration-300",
-                  isOpen && "opacity-0"
+                  isOpen && "opacity-0",
                 )}
               >
                 {item.title}
@@ -199,7 +225,7 @@ export default function ImageGallery({
               <span
                 className={cn(
                   "pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 opacity-0 transition-opacity duration-300 sm:gap-4 sm:p-5 lg:p-6",
-                  isOpen && "opacity-100"
+                  isOpen && "opacity-100",
                 )}
               >
                 <span aria-hidden className="min-w-0">
@@ -214,33 +240,57 @@ export default function ImageGallery({
                 </span>
 
                 {/* único caminho da tira para a galeria do evento */}
-                <Link
-                  href={item.href}
-                  tabIndex={isOpen ? undefined : -1}
-                  aria-hidden={!isOpen}
-                  aria-label={`Ver a galeria de ${item.title}`}
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-pink-500/50 text-pink-400 transition-colors duration-300",
-                    "hover:border-pink-500 hover:bg-pink-500 hover:text-white",
-                    "focus-visible:border-pink-500 focus-visible:bg-pink-500 focus-visible:text-white",
-                    isOpen && "pointer-events-auto"
-                  )}
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
-                    <path
-                      d="M4 12h15m0 0-6-6m6 6-6 6"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </Link>
+                {onOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen(item.id)}
+                    {...openProps(item.title, isOpen)}
+                  >
+                    <ArrowIcon />
+                  </button>
+                ) : item.href ? (
+                  <Link href={item.href} {...openProps(item.title, isOpen)}>
+                    <ArrowIcon />
+                  </Link>
+                ) : null}
               </span>
             </div>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * A seta é um link ou um botão conforme a galeria navegue ou abra no lugar;
+ * o que ela veste é o mesmo dos dois lados, inclusive ficar fora da ordem de
+ * tabulação enquanto a tira está fechada.
+ */
+function openProps(title: string, isOpen: boolean) {
+  return {
+    tabIndex: isOpen ? undefined : -1,
+    "aria-hidden": !isOpen,
+    "aria-label": `Ver a galeria de ${title}`,
+    className: cn(
+      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-pink-500/50 text-pink-400 transition-colors duration-300",
+      "hover:border-pink-500 hover:bg-pink-500 hover:text-white",
+      "focus-visible:border-pink-500 focus-visible:bg-pink-500 focus-visible:text-white",
+      isOpen ? "cursor-pointer pointer-events-auto" : "pointer-events-none",
+    ),
+  };
+}
+
+function ArrowIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+      <path
+        d="M4 12h15m0 0-6-6m6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

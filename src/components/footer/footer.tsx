@@ -11,7 +11,7 @@ import { Drips, Splatter, SprayStroke } from "@/components/ui/spray";
 import { footerArt } from "@/data/art";
 import { navItems } from "@/data/nav";
 import { perfTier } from "@/lib/perf";
-import { WHATSAPP_DISPLAY, socialLinks } from "@/data/social";
+import { WHATSAPP_DISPLAY, linkHub, socialLinks } from "@/data/social";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -366,6 +366,45 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
+
+            {/*
+              Atalho para a página de links: mesma linguagem dos tiles acima
+              (raio, borda e fundo), esticado para caber o domínio.
+            */}
+            <motion.a
+              href={linkHub.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${linkHub.label} — ${linkHub.handle}`}
+              whileHover={{ y: -4 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 420, damping: 22 }}
+              className="group mt-3 flex max-w-[19rem] items-center gap-3 rounded-[14px] border border-ink-600 bg-ink-800 px-4 py-3 text-ash-400 transition-colors duration-200 hover:border-pink-500 hover:text-pink-400 hover:shadow-[0_0_24px_rgb(240_25_125/0.28)]"
+            >
+              <linkHub.Icon className="h-5 w-5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="font-num block text-[10px] font-semibold tracking-[0.24em] text-ash-600 uppercase transition-colors duration-200 group-hover:text-pink-500">
+                  {linkHub.label}
+                </span>
+                <span className="block truncate text-[15px] text-white">
+                  {linkHub.handle}
+                </span>
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M7 17 17 7m0 0H8m9 0v9"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </motion.a>
 
             <p className="font-num mt-6 text-[11px] leading-relaxed font-semibold tracking-[0.24em] text-ash-600 uppercase">
               Congelando histórias{" "}

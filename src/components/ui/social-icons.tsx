@@ -54,3 +54,18 @@ export function TikTokIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Elo de corrente — usado no atalho para a página de links do Jamal. */
+export function LinkIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M10.4 13.6a3.6 3.6 0 0 0 5.1 0l2.9-2.9a3.6 3.6 0 0 0-5.1-5.1l-1.2 1.2m.5 4.6a3.6 3.6 0 0 0-5.1 0l-2.9 2.9a3.6 3.6 0 0 0 5.1 5.1l1.2-1.2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

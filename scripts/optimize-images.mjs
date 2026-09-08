@@ -67,6 +67,25 @@ const SINGLES = [
   },
 ];
 
+/**
+ * Fotos do tunel do hero. Vivem numa subpasta de public/pictures, entao o
+ * readdir raso do acervo nao as enxerga: a abertura tem curadoria propria e
+ * nao acompanha o acervo repartido entre os campeonatos.
+ */
+const HERO_DIR = path.join(SRC_DIR, "hero");
+const HERO_OUT = path.join(ROOT, "public", "hero");
+const HERO_MANIFEST = path.join(ROOT, "src", "data", "hero.ts");
+
+/**
+ * Logos das federacoes. Vivem numa subpasta de public/pictures, entao o readdir
+ * raso do acervo nao as enxerga. Saem com o alpha preservado e sem fundo
+ * chapado: quem pinta atras e a tira da galeria, no preto da marca.
+ */
+const LOGOS_DIR = path.join(SRC_DIR, "logo_camps");
+const LOGOS_OUT = path.join(ROOT, "public", "logos");
+const LOGOS_MANIFEST = path.join(ROOT, "src", "data", "logos.ts");
+const LOGO_WIDTH = 640;
+
 const EXCLUDED = new Set(SINGLES.flatMap((g) => [...g.files.keys()]));
 
 const MAX_WIDTH = 1600;
@@ -156,6 +175,8 @@ ${body}
   console.log(`\n${entries.length} imagens processadas → src/data/gallery.ts`);
 
   for (const group of SINGLES) await buildSingles(group);
+  await buildHero();
+  await buildLogos();
   await buildIcons();
 }
 
@@ -232,6 +253,150 @@ ${blocks.join("\n\n")}
 `,
     "utf8"
   );
+}
+
+/**
+ * Fotos da abertura → public/hero + manifesto tipado.
+ *
+ * Mesmo tratamento do acervo (largura máxima, webp, blur placeholder); o que
+ * muda é a origem e o destino. Os nomes chegam do Drive com acento e espaço
+ * ("Cópia de Cópia de IMG 4-29.jpg"), então o slug é agressivo antes de virar
+ * arquivo público.
+ */
+async function buildHero() {
+  await mkdir(HERO_OUT, { recursive: true });
+
+  const files = (await readdir(HERO_DIR)).filter(isPhoto).sort((a, b) => {
+    const [pa, na] = naturalKey(a);
+    const [pb, nb] = naturalKey(b);
+    return pa === pb ? na - nb : pa.localeCompare(pb);
+  });
+
+  if (!files.length) {
+    console.error(`Nenhuma imagem encontrada em ${HERO_DIR}`);
+    process.exit(1);
+  }
+
+  const entries = [];
+
+  for (const file of files) {
+    const slug = file
+      .replace(/\.[^.]+$/, "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const outName = `${slug}.webp`;
+    const input = sharp(path.join(HERO_DIR, file)).rotate(); // respeita EXIF
+
+    const info = await input
+      .clone()
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .webp({ quality: QUALITY, effort: 5 })
+      .toFile(path.join(HERO_OUT, outName));
+
+    const blur = await input
+      .clone()
+      .resize({ width: BLUR_WIDTH })
+      .webp({ quality: 40 })
+      .toBuffer();
+
+    entries.push({
+      src: `/hero/${outName}`,
+      width: info.width,
+      height: info.height,
+      blurDataURL: `data:image/webp;base64,${blur.toString("base64")}`,
+    });
+
+    console.log(`✓ hero ${file} → ${outName} (${info.width}×${info.height})`);
+  }
+
+  const body = entries
+    .map(
+      (e, i) => `  {
+    src: ${JSON.stringify(e.src)},
+    alt: ${JSON.stringify(`Abertura JML Sports — foto ${i + 1}`)},
+    width: ${e.width},
+    height: ${e.height},
+    blurDataURL: ${JSON.stringify(e.blurDataURL)},
+  },`
+    )
+    .join("\n");
+
+  await writeFile(
+    HERO_MANIFEST,
+    `// GERADO AUTOMATICAMENTE por scripts/optimize-images.mjs — não editar à mão.
+// Rode \`npm run images\` após trocar as fotos em public/pictures/hero.
+import type { GalleryImage } from "@/lib/types";
+
+export const heroImages: GalleryImage[] = [
+${body}
+];
+`,
+    "utf8"
+  );
+
+  console.log(`\n${entries.length} fotos da abertura → src/data/hero.ts`);
+}
+
+/**
+ * Logos das federações → public/logos + manifesto tipado.
+ *
+ * `trim()` come a moldura vazia (e o branco chapado do JPEG do Javali) antes do
+ * resize. Sem isso cada arquivo entraria na tira com uma margem própria e as
+ * logos apareceriam em tamanhos visualmente diferentes lado a lado.
+ */
+async function buildLogos() {
+  await mkdir(LOGOS_OUT, { recursive: true });
+
+  const files = (await readdir(LOGOS_DIR)).filter(isPhoto).sort();
+  const entries = [];
+
+  for (const file of files) {
+    const key = file.replace(/\.[^.]+$/, "");
+    const outName = `${key.toLowerCase().replace(/_/g, "-")}.webp`;
+
+    const input = sharp(path.join(LOGOS_DIR, file)).trim({ threshold: 12 });
+
+    const info = await input
+      .resize({ width: LOGO_WIDTH, withoutEnlargement: true })
+      .webp({ quality: 88, alphaQuality: 100, effort: 5 })
+      .toFile(path.join(LOGOS_OUT, outName));
+
+    entries.push({ key, src: `/logos/${outName}`, width: info.width, height: info.height });
+
+    console.log(`✓ logo ${file} → ${outName} (${info.width}×${info.height})`);
+  }
+
+  const body = entries
+    .map(
+      (e) => `  ${JSON.stringify(e.key)}: {
+    src: ${JSON.stringify(e.src)},
+    alt: ${JSON.stringify(`Logo da federação ${e.key.replace(/_/g, " ")}`)},
+    width: ${e.width},
+    height: ${e.height},
+  },`
+    )
+    .join("\n");
+
+  const header =
+    "// GERADO AUTOMATICAMENTE por scripts/optimize-images.mjs — não editar à mão.\n" +
+    "// Rode `npm run images` após adicionar logos em public/pictures/logo_camps.\n";
+
+  await writeFile(
+    LOGOS_MANIFEST,
+    `${header}import type { GalleryImage } from "@/lib/types";
+
+export const federationLogos: Record<string, GalleryImage> = {
+${body}
+};
+`,
+    "utf8"
+  );
+
+  console.log(`\n${entries.length} logos processadas → src/data/logos.ts`);
 }
 
 main().catch((err) => {

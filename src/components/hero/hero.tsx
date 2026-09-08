@@ -9,7 +9,7 @@ import InfiniteGallery, {
 } from "@/components/ui/3d-gallery-photography";
 import { Drips, Splatter } from "@/components/ui/spray";
 import HeroTitle from "@/components/hero/hero-title";
-import { galleryImages } from "@/data/gallery";
+import { heroImages } from "@/data/hero";
 import { usePerfTier } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -119,7 +119,7 @@ export default function Hero() {
         {/* túnel de fotos */}
         <InfiniteGallery
           ref={galleryRef}
-          images={galleryImages}
+          images={heroImages}
           speed={1.2}
           zSpacing={3}
           visibleCount={12}

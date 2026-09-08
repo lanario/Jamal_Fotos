@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
  *    "quero ver essa foto maior" virava navegação.
  *
  * 3. Nesse leque a fila sangra até as bordas da tela e a tira aberta cresce
- *    menos no celular (4x, não 5x): com nove eventos numa tela de 375px, é o
- *    que mantém as fechadas com largura suficiente para a foto se ler e o nome
- *    vertical caber.
+ *    menos no celular (4x, não 5x): numa tela de 375px, é o que mantém as
+ *    fechadas com largura suficiente para a imagem se ler e o nome vertical
+ *    caber.
  */
 
 export type GalleryStrip = {
@@ -38,6 +38,12 @@ export type GalleryStrip = {
   title: string;
   /** Linha de apoio — contagem de fotos, data, local. */
   meta?: string;
+  /**
+   * `cover` (padrão) é para foto: a imagem sangra a tira inteira. `contain` é
+   * para marca — logo de federação, por exemplo —, que não pode ser cortada:
+   * ela entra inteira, centralizada, com respiro nas bordas.
+   */
+  fit?: "cover" | "contain";
 };
 
 type ImageGalleryProps = {
@@ -89,6 +95,7 @@ export default function ImageGallery({
     >
       {items.map((item) => {
         const isOpen = active === item.id;
+        const isMark = item.fit === "contain";
 
         return (
           <li
@@ -108,7 +115,10 @@ export default function ImageGallery({
               className={cn(
                 "rounded-img relative h-[22rem] overflow-hidden sm:h-[28rem] lg:h-[32rem]",
                 "border transition-colors duration-500",
-                isOpen ? "border-pink-500/70" : "border-pink-500/25"
+                isOpen ? "border-pink-500/70" : "border-pink-500/25",
+                // marca não sangra a tira: sem foto, o card precisa de um
+                // fundo próprio para não virar um buraco no fundo da seção
+                isMark && "bg-white/[0.035]"
               )}
             >
               <Image
@@ -120,9 +130,21 @@ export default function ImageGallery({
                 blurDataURL={item.image.blurDataURL}
                 className={cn(
                   // regra do sistema: preto e branco em repouso, cor no foco
-                  "object-cover object-center transition",
+                  "object-center transition",
                   smooth ? "duration-700" : "duration-200",
-                  isOpen ? "grayscale-0" : "grayscale"
+                  isOpen ? "grayscale-0" : "grayscale",
+                  /*
+                   * Foto em preto e branco continua legível; marca, não. Metade
+                   * dessas logos é escura (azul-marinho, verde) e some contra o
+                   * ink-900 assim que perde a cor — o brilho a mais devolve a
+                   * silhueta na tira fechada e sai quando ela abre em cor.
+                   */
+                  isMark && !isOpen && "brightness-[1.7] contrast-[1.1]",
+                  isMark
+                    ? // o padding de baixo é maior para a marca subir e sair de
+                      // cima do bloco de texto, que pousa no rodapé da tira
+                      "object-contain px-2 pt-10 pb-28 sm:px-5 sm:pt-14 sm:pb-32"
+                    : "object-cover"
                 )}
               />
 

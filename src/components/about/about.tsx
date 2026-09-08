@@ -12,15 +12,12 @@ import { perfTier } from "@/lib/perf";
 
 gsap.registerPlugin(ScrollTrigger);
 
-/**
- * TEXTO PROVISÓRIO — bio genérica escrita a partir do material de marca
- * (as artes de agenda são todas de campeonatos no Rio). Troque pela versão
- * do Jamal antes de publicar.
- */
 const BIO = [
-  "Jamal é fotógrafo esportivo e fez da beira do tatame o seu lugar de trabalho. Acompanha campeonatos de Jiu-Jitsu por todo o Rio de Janeiro, do primeiro combate da manhã à final que ninguém quer perder.",
-  "O trabalho não é registrar o resultado: é achar o instante em que a luta vira. A queda, o encaixe, o olhar de quem sabe que venceu antes do árbitro levantar o braço.",
-  "Congelar histórias além do tatame não é um slogan: é a única forma de não deixar passar o que acontece em dois segundos.",
+  "Meu nome é Jamal e eu trabalho com fotografia esportiva.",
+  "Mais do que registrar uma luta, uma corrida ou uma disputa, eu procuro fotografar tudo o que existe ao redor daquele momento: a concentração antes de entrar, o olhar do treinador, a comemoração, o cansaço, a fé e tudo aquilo que normalmente acontece rápido demais para ser percebido.",
+  "Foi assim que encontrei a forma como gosto de fotografar esporte: com intensidade, proximidade e atenção às histórias que existem além da competição.",
+  "Hoje, meu trabalho passa principalmente pelo universo dos tatames e dos eventos esportivos, acompanhando atletas, equipes e campeonatos com uma linguagem mais documental e editorial.",
+  "Porque, no fim, o resultado importa. Mas a história que levou até ele também.",
 ];
 
 const TAGLINE = "Congelando histórias além do tatame";

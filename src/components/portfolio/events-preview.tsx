@@ -5,19 +5,31 @@ import { motion } from "framer-motion";
 
 import ImageGallery, { type GalleryStrip } from "@/components/ui/image-gallery";
 import { Splatter, SprayStroke } from "@/components/ui/spray";
-import { championships } from "@/data/championships";
+import {
+  federationHref,
+  federationPhotoCount,
+  federations,
+} from "@/data/federations";
 
 const EASE_BRAND = [0.2, 0.7, 0.3, 1] as const;
 
-/** Uma tira por evento — a primeira foto do conjunto é a capa. */
-const strips: GalleryStrip[] = championships.map((championship) => ({
-  id: championship.slug,
-  // destino da seta da tira: a galeria daquele campeonato, já aberta
-  href: `/portfolio?evento=${championship.slug}`,
-  image: championship.photos[0],
-  title: championship.name,
-  meta: `${championship.photos.length} fotos`,
-}));
+/**
+ * Uma tira por federação — a capa é a logo, não uma foto do evento. Quem quer
+ * ver as fotos segue pela seta, que cai na galeria do campeonato daquela
+ * federação (ou no acervo inteiro, quando ela ainda não tem evento amarrado).
+ */
+const strips: GalleryStrip[] = federations.map((federation) => {
+  const photos = federationPhotoCount(federation);
+
+  return {
+    id: federation.name,
+    href: federationHref(federation),
+    image: federation.logo,
+    title: federation.name,
+    meta: photos ? `${photos} fotos` : "Ver acervo",
+    fit: "contain",
+  };
+});
 
 export default function EventsPreview() {
   return (
@@ -74,7 +86,7 @@ export default function EventsPreview() {
           transition={{ duration: 0.8, delay: 0.1, ease: EASE_BRAND }}
           className="mt-10 sm:mt-14"
         >
-          <ImageGallery items={strips} label="Campeonatos cobertos por Jamal" />
+          <ImageGallery items={strips} label="Federações cobertas por Jamal" />
         </motion.div>
 
         <motion.div

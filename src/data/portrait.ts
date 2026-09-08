@@ -4,7 +4,7 @@ import type { GalleryImage } from "@/lib/types";
 export const jamalPortrait: GalleryImage = {
   src: "/portrait/jamal.webp",
   alt: "Jamal em cobertura, de câmera em punho no meio do público",
-  width: 1400,
-  height: 1400,
-  blurDataURL: "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAADwAQCdASoQABAAA4BaJaQAAxPNI8ryEAAA/qw/otJmXEMYMMB5gGqk5v7PzsxBzIxbefef+LICWqAxCEJT35a874czKMUj6sjDTs5GDGS4wt/UngeZ9QSN4Trso38DPv11F0qAFHgAAA==",
+  width: 1080,
+  height: 1616,
+  blurDataURL: "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAAAwBACdASoQABgAPu1iqU2ppaOiMAgBMB2JaQAD5XFKhV2keRQgnHsSWgAA/uzX/KVUqS5y9dk0mmCllabgXK87FjtF8P1ONyTyq8T1aWpQxC2RaTm9PhoUKH5a3m//LYQA3pAq3JX4nBMtXak2Dh8u5GCMW0OWD1Rd75WFqqer3dzf035CxsPGmU81rNXp2vQAAA==",
 };
